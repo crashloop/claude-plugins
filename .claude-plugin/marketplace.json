@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "crashloop-plugins",
+  "description": "Claude Code plugins by cgiovanni.",
+  "owner": {
+    "name": "cgiovanni"
+  },
+  "plugins": [
+    {
+      "name": "creed",
+      "source": "./creed",
+      "description": "Injects the compressed operating core every session and prompt; gates unverified completion claims.",
+      "category": "productivity"
+    }
+  ]
+}

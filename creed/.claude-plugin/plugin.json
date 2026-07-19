@@ -1,0 +1,8 @@
+{
+  "name": "creed",
+  "version": "0.2.0",
+  "description": "Enforces the Operating Manual disciplines: injects a compressed core at session start and every prompt (survives context compaction), and gates done/fixed/passing claims that ran no command.",
+  "author": {
+    "name": "cgiovanni"
+  }
+}
