@@ -16,11 +16,21 @@ class Context:
     _content: str | None = None
 
     def content(self) -> str:
+        """Read and cache the file's text, replacing undecodable bytes.
+
+        Returns:
+            The file's full text content.
+        """
         if self._content is None:
             self._content = self.path.read_text(errors="replace")
         return self._content
 
     def warn(self, msg: str) -> None:
+        """Attach a deduplicated note to findings produced by the current rule run.
+
+        Args:
+            msg: The note text to record.
+        """
         if msg not in self.notes:
             self.notes.append(msg)
 

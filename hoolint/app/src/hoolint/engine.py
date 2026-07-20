@@ -11,8 +11,8 @@ def _run_rule(rule: dict, files: list[Path], root: Path, mode: str,
               settings: dict) -> list[Finding]:
     root_r = root.resolve()
     matched = [f for f in files
-               if f.resolve().is_relative_to(root_r)
-               and any(f.resolve().relative_to(root_r).full_match(g)
+               if (f_r := f.resolve()).is_relative_to(root_r)
+               and any(f_r.relative_to(root_r).full_match(g)
                        for g in rule["globs"])]
     out: list[Finding] = []
     for path in matched:
@@ -41,8 +41,8 @@ def _guarded(rule: dict, files: list[Path], root: Path, mode: str,
     try:
         return _run_rule(rule, files, root, mode, settings)
     except Exception as exc:                     # noqa: BLE001 - deliberate
-        return [Finding(rule_id=rule["id"], file="", start_line=0, end_line=0,
-                        span_text="", severity="warn",
+        return [Finding(rule_id=rule.get("id", "<unknown-rule>"), file="",
+                        start_line=0, end_line=0, span_text="", severity="warn",
                         message=f"rule failed, skipped: {exc!r}")]
 
 

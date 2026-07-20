@@ -11,6 +11,16 @@ from hoolint.strategies.base import Context
 class RegexStrategy:
     def run(self, candidates: list[Finding] | None, stage: dict,
             ctx: Context) -> list[Finding]:
+        """Filter candidates by pattern match, or generate findings from file content.
+
+        Args:
+            candidates: Prior-stage findings to filter, or None to scan the file fresh.
+            stage: Stage config with "pattern" and optional "exclude"/"message".
+            ctx: Per-file execution context.
+
+        Returns:
+            Matching findings: the filtered candidates, or newly discovered ones.
+        """
         pat = re2.compile(stage["pattern"])
         excludes = [re2.compile(p) for p in stage.get("exclude", [])]
         if candidates is not None:
@@ -23,7 +33,7 @@ class RegexStrategy:
             if any(x.search(span) for x in excludes):
                 continue
             start = text.count("\n", 0, m.start()) + 1
-            end = start + span.rstrip("\n").count("\n")
+            end = start + span.count("\n") - (1 if span.endswith("\n") else 0)
             out.append(Finding(
                 rule_id=ctx.rule_id, file=str(ctx.path.relative_to(ctx.root)),
                 start_line=start, end_line=end, span_text=span,
