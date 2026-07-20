@@ -32,7 +32,20 @@ def load(root: Path) -> set[str]:
 
 
 def _excerpt(span: str) -> str:
-    return "\n".join(span.splitlines()[:3])[:200]
+    """First 3 lines of the offending span, safe to embed in TOML.
+
+    Control bytes are dropped: they carry nothing a human reviewer can read, and
+    tomlkit encodes ESC as `\\e`, a TOML 1.1 escape that stdlib tomllib refuses --
+    which would leave the committed waivers file permanently unreadable.
+
+    Args:
+        span: The offending source text.
+
+    Returns:
+        A printable excerpt of at most 3 lines and 200 characters.
+    """
+    text = "\n".join(span.splitlines()[:3])[:200]
+    return "".join(c for c in text if c in "\n\t" or c.isprintable())
 
 
 def add(root: Path, finding: Finding, reason: str) -> None:

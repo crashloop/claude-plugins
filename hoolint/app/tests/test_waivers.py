@@ -75,3 +75,15 @@ def test_malformed_waivers_file_raises(tmp_path):
     (tmp_path / "hoolint-waivers.toml").write_text("[[waiver]\nfingerprint = ")
     with pytest.raises(tomllib.TOMLDecodeError):
         waivers.load(tmp_path)
+
+
+def test_control_bytes_in_span_do_not_corrupt_the_file(tmp_path):
+    """An ESC byte must not make the committed waivers file unreadable.
+
+    tomlkit encodes ESC as `\\e` (TOML 1.1), which stdlib tomllib rejects, so an
+    unscrubbed span would break every later load() of a committed file.
+    """
+    f = Finding(rule_id="r", file="x.py", start_line=1, end_line=2,
+                span_text="# ansi \x1b[31mred\x1b[0m\n# next\n", message="m")
+    waivers.add(tmp_path, f, "captured terminal output fixture")
+    assert waivers.load(tmp_path) == {f.fingerprint}
