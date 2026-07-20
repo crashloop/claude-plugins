@@ -29,3 +29,21 @@ def test_blocked_files_and_records_persist(tmp_path):
     assert state.last_fingerprints(tmp_path) == {"r:f:abc"}
     assert state.finding_record(tmp_path, "r:f:abc")["file"] == "m.py"
     assert state.finding_record(tmp_path, "nope") is None
+
+
+def test_bump_creates_gitignore_on_a_fresh_project(tmp_path):
+    """.hoolint/ must self-gitignore the first time anything writes into it,
+    the same way journal.py already does -- otherwise state.json becomes
+    committable."""
+    state.bump(tmp_path, [_rec("a")], [])
+    assert (tmp_path / ".hoolint" / ".gitignore").read_text() == "*\n"
+
+
+def test_corrupt_state_file_degrades_to_empty_state(tmp_path):
+    """Unlike hoolint-waivers.toml, state.json is ephemeral and hoolint-owned:
+    a bad read must reset counters, not crash the Stop hook."""
+    (tmp_path / ".hoolint").mkdir()
+    (tmp_path / ".hoolint" / "state.json").write_text("{not valid json")
+    assert state.blocked_files(tmp_path) == []
+    assert state.last_fingerprints(tmp_path) == set()
+    assert state.bump(tmp_path, [_rec("a")], []) == (1, 1)

@@ -13,6 +13,8 @@ Stop hook.
 import json
 from pathlib import Path
 
+from hoolint.scratch import ensure_dir
+
 
 def _path(root: Path) -> Path:
     return root / ".hoolint" / "state.json"
@@ -37,8 +39,8 @@ def bump(root: Path, records: list[dict],
         records: `Finding.record()` dicts for the blocking findings.
         blocked_files: Paths that must stay in scope at the next stop.
     """
+    ensure_dir(root)
     p = _path(root)
-    p.parent.mkdir(exist_ok=True)
     fps = sorted(r["fingerprint"] for r in records)
     prev = _read(root)
     if prev.get("fingerprints") == fps:
@@ -92,8 +94,8 @@ def record_findings(root: Path, records: list[dict]) -> None:
         records: `Finding.record()` dicts for the surfaced (non-blocking)
             findings.
     """
+    ensure_dir(root)
     p = _path(root)
-    p.parent.mkdir(exist_ok=True)
     p.write_text(json.dumps({"fingerprints": [], "same_set": 0,
                              "consecutive": 0, "blocked_files": [],
                              "last_findings": records}))

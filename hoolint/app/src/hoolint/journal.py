@@ -2,6 +2,8 @@
 import json
 from pathlib import Path
 
+from hoolint.scratch import ensure_dir
+
 
 def _path(root: Path, session_id: str) -> Path:
     return root / ".hoolint" / f"session-{session_id}.jsonl"
@@ -15,11 +17,8 @@ def add(root: Path, session_id: str, file_path: str) -> None:
       session_id: Session identifier.
       file_path: Absolute path of the file to record.
     """
+    ensure_dir(root)
     p = _path(root, session_id)
-    p.parent.mkdir(exist_ok=True)
-    gitignore = p.parent / ".gitignore"
-    if not gitignore.exists():
-        gitignore.write_text("*\n")
     with p.open("a") as f:
         f.write(json.dumps({"file": file_path}) + "\n")
 
