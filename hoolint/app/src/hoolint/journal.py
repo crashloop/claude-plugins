@@ -32,16 +32,19 @@ def files(root: Path, session_id: str) -> list[Path]:
       session_id: Session identifier.
 
     Returns:
-      Deduplicated, existing files within the project root, sorted by path.
+      Deduplicated, existing files within the project root.
     """
     p = _path(root, session_id)
     if not p.exists():
         return []
     seen: dict[str, None] = {}
     for line in p.read_text().splitlines():
-        seen.setdefault(json.loads(line)["file"])
+        try:
+            seen.setdefault(json.loads(line)["file"])
+        except (json.JSONDecodeError, KeyError):
+            continue  # a corrupt line must not kill the Stop check
     return [f for f in map(Path, seen)
-            if f.exists() and f.is_relative_to(root)]
+            if f.exists() and f.resolve().is_relative_to(root.resolve())]
 
 
 def clear(root: Path, session_id: str) -> None:
