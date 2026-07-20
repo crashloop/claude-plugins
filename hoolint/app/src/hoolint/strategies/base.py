@@ -26,7 +26,9 @@ class Context:
         return self._content
 
     def warn(self, msg: str) -> None:
-        """Attach a deduplicated note to findings produced by the current rule run.
+        """Record a deduplicated note on this context.
+
+        The engine copies these onto any findings the rule's stages produce.
 
         Args:
             msg: The note text to record.
