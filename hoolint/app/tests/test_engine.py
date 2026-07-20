@@ -1,4 +1,3 @@
-from pathlib import Path
 import pytest
 from hoolint.config import Config
 from hoolint.engine import run
