@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from hoolint import journal
 
 
@@ -27,7 +26,6 @@ def test_files_excludes_lexical_prefix_escapes(tmp_path):
     outside.write_text("x = 1\n")
     # Manually craft a journal entry with .. that lexically prefixes root
     # but resolves outside (e.g., /tmp/rootx/../../etc/passwd pattern)
-    root_name = tmp_path.name
     root_parent = tmp_path.parent.name
     crafted_path = tmp_path / ".." / ".." / root_parent / "outside.py"
     journal.add(tmp_path, "s2", str(a))
