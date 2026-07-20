@@ -1,0 +1,14 @@
+[settings]
+stand_down_after = 2
+git_ref = "auto"
+
+[[rule]]
+id = "verbose-comments"
+globs = ["**/*.py"]
+severity = "block"
+
+[[rule.stage]]
+strategy = "regex"
+# Hash-space only: excludes shebangs and `#noqa`. RE2 has no lookahead.
+pattern = "(?m)(^[ \\t]*# [^\\n]*\\n){3,}"
+message = "more than 2 consecutive comment lines"
