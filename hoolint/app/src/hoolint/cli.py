@@ -32,13 +32,25 @@ def _system_message(text: str) -> None:
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
+    """Run rules over the session journal or a git diff and report findings.
+
+    Args:
+        args: Parsed CLI namespace for the `check` subcommand.
+
+    Returns:
+        Session mode: 2 if a block finding survives, 0 otherwise.
+        Git mode: 1 if a block finding exists (or the check itself is
+        broken), 0 otherwise.
+    """
     root = Path(args.root).resolve()
     cfg = load_config(root)
-    session_id, stop_hook_active = "default", False
+    session_id = "default"
     if args.mode == "session":
         hook = json.load(sys.stdin) if not sys.stdin.isatty() else {}
         session_id = hook.get("session_id", "default")
-        stop_hook_active = bool(hook.get("stop_hook_active"))
+        # Read but not yet used: kept for parity with the Stop-hook payload
+        # shape later tasks (trust, warmup) may branch on.
+        _stop_hook_active = bool(hook.get("stop_hook_active"))
         # Files still blocked last run stay in scope even if nothing was edited.
         seen = {p: None for p in journal.files(root, session_id)}
         seen.update({p: None for p in state.blocked_files(root) if p.exists()})
@@ -97,6 +109,15 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_waive(args: argparse.Namespace) -> int:
+    """Record a committed waiver, or prune waivers a full check no longer finds.
+
+    Args:
+        args: Parsed CLI namespace for the `waive` subcommand.
+
+    Returns:
+        0 on success; 1 if the fingerprint was not in the last check's
+        finding set.
+    """
     root = Path(args.root).resolve()
     if args.prune:
         cfg = load_config(root)
@@ -116,6 +137,14 @@ def _cmd_waive(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """hoolint CLI entry point: dispatches to the `check` and `waive` subcommands.
+
+    Args:
+        argv: Argument vector to parse; defaults to `sys.argv[1:]`.
+
+    Returns:
+        The subcommand's exit code.
+    """
     p = argparse.ArgumentParser(prog="hoolint")
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check")
