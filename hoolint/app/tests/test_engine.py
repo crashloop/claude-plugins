@@ -136,3 +136,21 @@ def test_or_stage_unions_candidates_by_fingerprint(tmp_path):
     assert len(found) == 2
     assert len(fingerprints) == 2
     assert {f_.span_text for f_ in found} == {"# A\n", "# B\n"}
+
+
+def test_escalate_marks_in_session_and_keeps_severity_in_git(tmp_path):
+    from hoolint.config import Config
+    rule = {"id": "r", "globs": ["**/*.py"], "severity": "block",
+            "stage": [
+                {"strategy": "regex", "pattern": r"(?m)(^# [^\n]*\n){3,}",
+                 "message": "verbose"},
+                {"strategy": "escalate", "prompt": "Is this comment needed?"}]}
+    f = tmp_path / "m.py"
+    f.write_text("# a\n# b\n# c\nx = 1\n")
+    cfg = Config(rules=[rule], settings={})
+    sess = run(cfg, [f], tmp_path, "session")
+    assert sess[0].needs_judgment and sess[0].severity == "block"
+    git = run(cfg, [f], tmp_path, "git")
+    assert not git[0].needs_judgment
+    assert git[0].severity == "block"          # CI can still fail
+    assert any("not-judged" in n for n in git[0].notes)

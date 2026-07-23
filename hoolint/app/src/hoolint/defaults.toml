@@ -1,6 +1,7 @@
 [settings]
 stand_down_after = 2
 git_ref = "auto"
+semantic_model = "minishlab/potion-base-8M"
 
 [[rule]]
 id = "verbose-comments"
@@ -9,6 +10,61 @@ severity = "block"
 
 [[rule.stage]]
 strategy = "regex"
-# Hash-space only: excludes shebangs and `#noqa`. RE2 has no lookahead.
+# Hash-space only: RE2 has no lookahead, and `# ` already excludes shebangs
+# and `#noqa`. The exclude list carries the rest of the known-benign shapes.
 pattern = "(?m)(^[ \\t]*# [^\\n]*\\n){3,}"
+exclude = ["(?i)(copyright|SPDX-License|licensed under)",
+           "(?i)# *(noqa|type: *ignore|pylint|pragma|fmt: *off)",
+           "^[ \\t]*# *(def |class |import |from |return |if |for |while )"]
 message = "more than 2 consecutive comment lines"
+
+[[rule.stage]]
+strategy = "semantic"
+op = "and"
+# Set from tests/test_semantic_calibration.py; record the measured
+# false-positive rate here when you change it.
+threshold = 0.6
+
+[[rule.stage]]
+strategy = "local_llm"
+op = "and"
+model = "qwen3:4b"
+max_candidates = 10
+budget_seconds = 60
+prompt = """Judge each numbered comment block below.
+Reply with one line per block: `[N] VIOLATION: <reason>` or `[N] OK: <reason>`.
+VIOLATION if the comment merely restates the adjacent code or pads with filler.
+OK if it carries information the code cannot express — intent, a constraint, a
+reference, a warning, or a reason for a non-obvious choice.
+
+Comment blocks:
+{span}"""
+
+[[rule.stage]]
+strategy = "escalate"
+prompt = """Could this comment be expressed in at most 2 lines without losing
+meaning? If yes, rewrite it. If it is genuinely necessary as written, leave it
+and say so — do NOT waive on your own judgment. Waive only if the user
+explicitly asked for this comment, and record that in the reason."""
+
+[[rule]]
+id = "doc-broken-links"
+globs = ["**/*.md"]
+severity = "warn"
+
+[[rule.stage]]
+strategy = "doc_links"
+
+[[rule]]
+id = "doc-drift"
+globs = ["**/*.md"]
+severity = "warn"
+
+[[rule.stage]]
+strategy = "doc_refs"
+
+[[rule.stage]]
+strategy = "escalate"
+prompt = """This doc references a file that no longer exists. Update the doc if
+the reference is stale. If the reference is deliberate (a planned path, an
+example), say so and leave it — waive only with the user's explicit sanction."""
