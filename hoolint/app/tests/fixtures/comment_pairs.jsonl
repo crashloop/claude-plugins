@@ -1,0 +1,20 @@
+{"comment": "# adds one to n and returns it", "code": "def add_one(n):\n    return n + 1", "redundant": true}
+{"comment": "# increments the counter by one", "code": "counter += 1", "redundant": true}
+{"comment": "# returns the sum of a and b", "code": "def sum_ab(a, b):\n    return a + b", "redundant": true}
+{"comment": "# sets x to zero", "code": "x = 0", "redundant": true}
+{"comment": "# loops over items in the list", "code": "for item in items:\n    process(item)", "redundant": true}
+{"comment": "# opens the file for reading", "code": "f = open(path, \"r\")", "redundant": true}
+{"comment": "# checks if n is even", "code": "if n % 2 == 0:\n    return True", "redundant": true}
+{"comment": "# appends value to the list", "code": "results.append(value)", "redundant": true}
+{"comment": "# multiplies width by height", "code": "area = width * height", "redundant": true}
+{"comment": "# closes the connection", "code": "conn.close()", "redundant": true}
+{"comment": "# licensed under MIT, see LICENSE for details", "code": "def add_one(n):\n    return n + 1", "redundant": false}
+{"comment": "# retry budget matches the SLA in RFC-4521, do not raise without approval", "code": "MAX_RETRIES = 3", "redundant": false}
+{"comment": "# workaround for upstream bug #4821, remove once fixed upstream", "code": "time.sleep(0.1)", "redundant": false}
+{"comment": "# offset by one because the vendor API is 1-indexed, not 0-indexed", "code": "row_index = raw_index + 1", "redundant": false}
+{"comment": "# guards against the race described in incident-2023-11", "code": "with lock:\n    counter += 1", "redundant": false}
+{"comment": "# empirically tuned batch size; smaller values thrash the GPU cache", "code": "BATCH_SIZE = 64", "redundant": false}
+{"comment": "# must run before the migration below or the backfill silently no-ops", "code": "run_backfill()", "redundant": false}
+{"comment": "# customer-facing copy, keep in sync with the design doc", "code": "ERROR_MSG = \"Something went wrong\"", "redundant": false}
+{"comment": "# do not reorder: downstream consumers depend on field order for hashing", "code": "fields = [\"id\", \"name\", \"ts\"]", "redundant": false}
+{"comment": "# threshold chosen to keep false positive rate under 5% per calibration run", "code": "THRESHOLD = 0.6", "redundant": false}

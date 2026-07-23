@@ -1,4 +1,4 @@
-"""hoolint CLI: check, waive (trust and warmup added by later tasks)."""
+"""hoolint CLI: check, waive, warmup (trust added by a later task)."""
 import argparse
 import json
 import sys
@@ -146,8 +146,16 @@ def _cmd_waive(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_warmup(args: argparse.Namespace) -> int:
+    from hoolint.strategies.semantic import download_model
+    download_model()
+    print("hoolint: warm")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """hoolint CLI entry point: dispatches to the `check` and `waive` subcommands.
+    """hoolint CLI entry point: dispatches to the `check`, `waive`, and `warmup`
+    subcommands.
 
     Args:
         argv: Argument vector to parse; defaults to `sys.argv[1:]`.
@@ -168,6 +176,9 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--prune", action="store_true")
     w.add_argument("--root", default=".")
     w.set_defaults(fn=_cmd_waive)
+    wu = sub.add_parser("warmup")
+    wu.add_argument("--root", default=".")
+    wu.set_defaults(fn=_cmd_warmup)
     args = p.parse_args(argv)
     return args.fn(args)
 

@@ -133,6 +133,7 @@ dependencies = [
     { name = "google-re2" },
     { name = "httpx" },
     { name = "model2vec" },
+    { name = "numpy" },
     { name = "tomlkit" },
 ]
 
@@ -146,6 +147,7 @@ requires-dist = [
     { name = "google-re2", specifier = ">=1.1" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "model2vec", specifier = ">=0.3" },
+    { name = "numpy", specifier = ">=2.5.1" },
     { name = "tomlkit", specifier = ">=0.15.1" },
 ]
 
