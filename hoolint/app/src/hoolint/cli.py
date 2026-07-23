@@ -172,11 +172,18 @@ def _cmd_trust(args: argparse.Namespace) -> int:
         args: Parsed CLI namespace for the `trust` subcommand.
 
     Returns:
-        0 always; granting trust cannot fail short of a filesystem error.
+        0 if the grant was recorded, 1 if refused.
     """
-    trust.grant(Path(args.root).resolve())
-    print("hoolint: project trusted; custom rules will load")
-    return 0
+    root = Path(args.root).resolve()
+    if trust.grant(root):
+        print("hoolint: project trusted; custom rules will load")
+        return 0
+    if trust.rules_digest(root) is None:
+        print("hoolint: hoolint_rules/ contains a symlink; refusing to trust "
+              "an unpinned tree")
+    else:
+        print("hoolint: trust store is corrupt; fix or remove it before granting trust")
+    return 1
 
 
 def main(argv: list[str] | None = None) -> int:
