@@ -1,4 +1,4 @@
-"""hoolint CLI: check, waive, warmup (trust added by a later task)."""
+"""hoolint CLI: check, waive, warmup, trust."""
 import argparse
 import json
 import sys
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import tomlkit
 
-from hoolint import changes, journal, state, waivers   # trust added in Task 11
+from hoolint import changes, journal, state, trust, waivers
 from hoolint.config import load_config
 from hoolint.engine import run as engine_run
 from hoolint.findings import Finding
@@ -45,7 +45,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
         broken), 0 otherwise.
     """
     root = Path(args.root).resolve()
-    cfg = load_config(root)
+    extra_rules, trust_notice = trust.load_custom_rules(root)
+    cfg = load_config(root, extra_rules=extra_rules)
     session_id = "default"
     if args.mode == "session":
         hook = json.load(sys.stdin) if not sys.stdin.isatty() else {}
@@ -68,6 +69,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
         waived = waivers.load(root)
     except tomllib.TOMLDecodeError as exc:
         msg = f"hoolint: {waivers.FILE} is malformed, ignoring this check: {exc}"
+        if trust_notice:
+            msg += f"\n{trust_notice}"
         if args.mode == "git":
             print(msg, file=sys.stderr)
             return 1  # broken config must not silently pass a pipeline check
@@ -78,6 +81,8 @@ def _cmd_check(args: argparse.Namespace) -> int:
     warns = [f for f in found if f.severity == "warn"]
 
     if args.mode == "git":
+        if trust_notice:
+            print(f"hoolint: {trust_notice}", file=sys.stderr)
         for f in found:
             print(_format(f))
         return 1 if blocks else 0
@@ -85,8 +90,11 @@ def _cmd_check(args: argparse.Namespace) -> int:
     if not blocks:
         journal.clear(root, session_id)
         state.record_findings(root, [f.record() for f in found])
-        if warns:
-            _system_message("hoolint:\n" + "\n".join(_format(f) for f in warns))
+        lines = [_format(f) for f in warns]
+        if trust_notice:
+            lines.append(trust_notice)
+        if lines:
+            _system_message("hoolint:\n" + "\n".join(lines))
         return 0
 
     same, consecutive = state.bump(root, [f.record() for f in blocks],
@@ -96,13 +104,17 @@ def _cmd_check(args: argparse.Namespace) -> int:
         state.record_findings(root, [f.record() for f in found])
         journal.clear(root, session_id)
         report = "\n".join(_format(f) for f in blocks)
-        _system_message(
-            f"hoolint stand-down after {consecutive} consecutive blocked stops "
-            f"— these need a human decision:\n{report}")
+        text = (f"hoolint stand-down after {consecutive} consecutive blocked stops "
+                f"— these need a human decision:\n{report}")
+        if trust_notice:
+            text += f"\n{trust_notice}"
+        _system_message(text)
         return 0
     print(f"hoolint: {len(blocks)} blocking finding(s).", file=sys.stderr)
     for f in blocks:
         print(_format(f), file=sys.stderr)
+    if trust_notice:
+        print(f"hoolint: {trust_notice}", file=sys.stderr)
     print(WAIVE_HINT, file=sys.stderr)
     return 2
 
@@ -153,9 +165,23 @@ def _cmd_warmup(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_trust(args: argparse.Namespace) -> int:
+    """Grant this project's hoolint_rules/ content permission to be exec'd.
+
+    Args:
+        args: Parsed CLI namespace for the `trust` subcommand.
+
+    Returns:
+        0 always; granting trust cannot fail short of a filesystem error.
+    """
+    trust.grant(Path(args.root).resolve())
+    print("hoolint: project trusted; custom rules will load")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
-    """hoolint CLI entry point: dispatches to the `check`, `waive`, and `warmup`
-    subcommands.
+    """hoolint CLI entry point: dispatches to the `check`, `waive`, `warmup`,
+    and `trust` subcommands.
 
     Args:
         argv: Argument vector to parse; defaults to `sys.argv[1:]`.
@@ -179,6 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     wu = sub.add_parser("warmup")
     wu.add_argument("--root", default=".")
     wu.set_defaults(fn=_cmd_warmup)
+    t = sub.add_parser("trust")
+    t.add_argument("--root", default=".")
+    t.set_defaults(fn=_cmd_trust)
     args = p.parse_args(argv)
     return args.fn(args)
 

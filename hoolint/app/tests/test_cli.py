@@ -158,6 +158,42 @@ def test_git_mode_reports_malformed_waivers_without_passing(project):
     assert code == 1
 
 
+def test_untrusted_custom_rules_notice_reaches_system_message(tmp_path, monkeypatch, capsys):
+    """A bare print() is discarded by the Stop hook; the notice must ride the
+    systemMessage JSON instead."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    (tmp_path / "hoolint_rules").mkdir()
+    (tmp_path / "hoolint_rules" / "x.py").write_text(
+        'rule = {"id": "custom-x", "globs": ["*.py"], "severity": "warn", "stage": []}\n')
+    payload = {"session_id": "s1"}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    code = cli.main(["check", "--mode", "session", "--root", str(tmp_path)])
+    out = capsys.readouterr()
+    assert code == 0
+    msg = json.loads(out.out)["systemMessage"]
+    assert "hoolint trust" in msg
+
+
+def test_trust_subcommand_grants_and_check_then_loads_rule(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    (tmp_path / "hoolint_rules").mkdir()
+    (tmp_path / "hoolint_rules" / "x.py").write_text(
+        'rule = {"id": "custom-x", "globs": ["*.py"], "severity": "warn", "stage": []}\n')
+    code = cli.main(["trust", "--root", str(tmp_path)])
+    assert code == 0
+    assert "trusted" in capsys.readouterr().out
+
+    from hoolint import trust
+    assert trust.is_trusted(tmp_path) is True
+
+    payload = {"session_id": "s1"}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+    code = cli.main(["check", "--mode", "session", "--root", str(tmp_path)])
+    out = capsys.readouterr()
+    assert code == 0
+    assert out.out == ""   # no notice, no warns -- nothing to say
+
+
 def test_waive_prune_reports_malformed_waivers_without_traceback(project, capsys):
     """`waive --prune` must report a malformed waivers file, not raise.
 
