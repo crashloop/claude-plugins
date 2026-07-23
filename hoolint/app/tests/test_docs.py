@@ -74,3 +74,44 @@ def test_link_inside_fenced_block_not_flagged(tmp_path):
     md.write_text("```\n[bad](missing.md)\n```\n")
     found = run(Config(rules=[LINKS], settings={}), [md], tmp_path, "git")
     assert found == []
+
+
+def test_shortcut_reference_in_prose_not_flagged(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("See [TODO] later and item [3] below.\nThe list [note] is fine.\n")
+    found = run(Config(rules=[LINKS], settings={}), [md], tmp_path, "git")
+    assert found == []
+
+
+def test_shortcut_reference_with_matching_definition_still_not_flagged(tmp_path):
+    """Shortcut refs are no longer a supported use, even when a definition exists."""
+    (tmp_path / "real.md").write_text("x")
+    md = tmp_path / "doc.md"
+    md.write_text("A note on [label] here.\n\n[label]: real.md\n")
+    found = run(Config(rules=[LINKS], settings={}), [md], tmp_path, "git")
+    assert found == []
+
+
+def test_collapsed_reference_style_link_resolves(tmp_path):
+    (tmp_path / "real.md").write_text("x")
+    md = tmp_path / "doc.md"
+    md.write_text("[text][]\n\n[text]: real.md\n")
+    found = run(Config(rules=[LINKS], settings={}), [md], tmp_path, "git")
+    assert found == []
+
+
+def test_prose_brackets_do_not_bury_real_broken_link(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text(
+        "# Notes\n"
+        "See [TODO] later and item [3] below.\n"
+        "The list [a, b, c] is fine.\n"
+        "A real broken [link](gone.md) here.\n"
+        "Check [the docs][guide] for more.\n"
+        "Priority [P1] and [note] tags.\n"
+    )
+    found = run(Config(rules=[LINKS], settings={}), [md], tmp_path, "git")
+    assert len(found) == 2
+    messages = {f.span_text: f.message for f in found}
+    assert messages["gone.md"] == "broken relative link: gone.md"
+    assert messages["guide"] == "undefined reference: [guide]"

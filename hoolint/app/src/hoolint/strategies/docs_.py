@@ -8,11 +8,11 @@ from hoolint.findings import Finding
 from hoolint.strategies.base import Context
 
 # Alt 1: inline `[text](target)`. Alt 2: reference `[text][ref]` / `[text][]`.
-# Alt 3: shortcut `[ref]`, excluded when it's actually a `[ref]:` definition.
+# The shortcut form `[ref]` (a single bracket pair, nothing after it) is not
+# matched: it's indistinguishable from ordinary bracketed prose.
 _LINK_ANY = re.compile(
     r"\[([^\]]*)\]\(([^)]+)\)"
     r"|\[([^\]]+)\]\[([^\]]*)\]"
-    r"|\[([^\]]+)\](?!:)"
 )
 _DEF = re.compile(r"^\s{0,3}\[([^\]]+)\]:\s*(\S+)")
 _REF = re.compile(r"`([\w./-]+\.(?:py|md|toml|json|sh|js|ts|yaml|yml))`")
@@ -104,9 +104,11 @@ class DocLinksStrategy:
             ctx: Context) -> list[Finding]:
         """Flag relative markdown links whose target file does not exist.
 
-        Handles inline links `[t](path "title")`, reference links
-        `[t][ref]` / `[t][]` / `[ref]`, and skips fenced code blocks so
-        markdown examples aren't scanned as live links.
+        Handles inline links `[t](path "title")` and reference links
+        `[t][ref]` / `[t][]`, and skips fenced code blocks so markdown
+        examples aren't scanned as live links. The bare shortcut form
+        `[ref]` is intentionally not treated as a reference use: it is
+        indistinguishable from ordinary bracketed prose.
 
         Args:
             candidates: Ignored; this strategy generates from the file itself.
@@ -130,8 +132,7 @@ class DocLinksStrategy:
                         out.append(_finding(ctx, i, target,
                                             f"broken relative link: {target}"))
                     continue
-                label = (m.group(4) or m.group(3)) if m.group(3) is not None else m.group(5)
-                label = label.lower()
+                label = (m.group(4) or m.group(3)).lower()
                 if label not in defs:
                     out.append(_finding(ctx, i, label,
                                         f"undefined reference: [{label}]"))
