@@ -1,21 +1,50 @@
 # hoolint
 
-A Claude Code plugin that installs hooks to check code and documentation.
+Claude Code plugin: when the model stops, hoolint checks every file it
+touched — code and docs — through stacked strategies of increasing cost,
+and blocks the stop until findings are fixed or waived.
 
 Name: **hoolint** = hook + lint.
 
-## Purpose
+## How it works
 
-Ship a set of hooks that run automatically during a Claude Code session and
-check what gets written:
+1. `PostToolUse` journals every file Claude writes or edits.
+2. `Stop` runs `hoolint check`: rules pipe candidates through stages —
+   `regex` (cheap filter) → `semantic` (model2vec redundancy-with-code) →
+   `local_llm` (Ollama/vLLM/LM Studio via one OpenAI-compatible endpoint) →
+   `escalate` (the session model judges the shortlist).
+3. Confirmed `block` findings exit 2: Claude keeps working and fixes them.
+   After `stand_down_after` (default 2) blocked stops, hoolint stands down and
+   hands the findings to the human. A filter tier that could not run (no model,
+   no endpoint) demotes that rule to advisory for the run — an
+   incompletely-configured install reports but never blocks.
 
-- **Code** — lint, format, and static-analysis checks on edited files.
-- **Documentation** — checks on markdown and docstrings (staleness, broken
-  links, missing or out-of-date sections).
+## Waivers
 
-Hooks enforce the checks at the harness level, so they fire whether or not the
-model remembers to run them.
+`hoolint waive <fingerprint> --reason "<why>"` writes to
+`hoolint-waivers.toml` — committed, team-shared, reviewed in the PR diff. Each
+entry carries the excused span and its location, so a reviewer can judge it
+without checking out the branch. A waiver stops matching once the excused span
+changes; `hoolint waive --prune` drops entries that no longer match. Waiving is
+only possible for a finding hoolint actually reported, and is reserved for code
+the user explicitly sanctioned.
 
-## Status
+## CI / verification pipelines
 
-Purpose only. No scaffold yet.
+`uv run --project <plugin>/app hoolint check --mode git --ref <ref>` checks
+`git diff` instead of the session journal; exit 1 on block findings.
+`escalate` stages mark findings `not-judged` but keep their severity, so CI
+still fails on them; `local_llm` runs whenever a local endpoint is up.
+
+## Configuration
+
+`hoolint.toml` at the project root. Stock rules (`verbose-comments`,
+`doc-broken-links`, `doc-drift`) are on by default; same-id rules override
+wholesale, `enabled = false` disables. Custom Python rules in `hoolint_rules/`
+load only after `hoolint trust`, and the grant is pinned to those files'
+content — adding or editing a rule re-arms the prompt.
+
+`local_llm.base_url` is restricted to loopback and private addresses, so a
+project's config cannot ship your code to a public host.
+
+See `CONTEXT.md` for the vocabulary.
