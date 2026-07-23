@@ -153,3 +153,60 @@ def test_dns_resolution_failure_fails_closed(monkeypatch):
         raise socket.gaierror("name or service not known")
     monkeypatch.setattr(mod.socket, "getaddrinfo", fake_getaddrinfo)
     assert mod.is_local("http://does-not-resolve.example.com/v1") is False
+
+
+def test_null_content_reply_skips_and_disarms_instead_of_crashing(tmp_path):
+    """Ollama can return `"content": null` for an empty completion. This
+    passes the KeyError/IndexError/ValueError guard untouched (every key is
+    present, the value is just None), so it must be caught separately or
+    `_apply_verdicts` crashes on `None.splitlines()`.
+    """
+    ctx = _ctx(tmp_path)
+    def null_content(request):
+        return httpx.Response(200, json={
+            "choices": [{"message": {"content": None}}]})
+    strat = LocalLLMStrategy(transport=httpx.MockTransport(null_content))
+    cand = _cand()
+    assert strat.run([cand], STAGE, ctx) == [cand]
+    assert ctx.filter_skipped is True
+    assert any("malformed reply" in n for n in ctx.notes)
+
+
+def test_real_path_pins_connection_to_the_validated_ip(tmp_path, monkeypatch):
+    """The real (non-injected-transport) path must connect to the address
+    that was just validated, not let httpx re-resolve the hostname at
+    connect time - otherwise a hostile DNS server could answer the
+    validation lookup and the connection lookup differently (TOCTOU / DNS
+    rebinding), defeating the whole guard. No real socket is ever opened:
+    getaddrinfo and the innermost transport are both faked.
+    """
+    import socket
+    from hoolint.strategies import local_llm as mod
+
+    def fake_getaddrinfo(host, port):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 0))]
+    monkeypatch.setattr(mod.socket, "getaddrinfo", fake_getaddrinfo)
+
+    seen = {}
+    class _FakeInner(httpx.BaseTransport):
+        def handle_request(self, request):
+            seen["url_host"] = request.url.host
+            seen["host_header"] = request.headers.get("host")
+            return httpx.Response(200, json={
+                "choices": [{"message": {"content": "[0] OK: fine"}}]})
+
+    real_cls = mod._PinnedIPTransport
+    monkeypatch.setattr(
+        mod, "_PinnedIPTransport",
+        lambda pinned_ip: real_cls(pinned_ip, inner=_FakeInner()))
+    # conftest pins this env var to a closed port for every other test;
+    # override it here so the pinning under test sees a hostname base_url.
+    monkeypatch.delenv("HOOLINT_LLM_BASE_URL", raising=False)
+
+    ctx = _ctx(tmp_path)
+    strat = LocalLLMStrategy(transport=None)
+    stage = {**STAGE, "base_url": "http://localhost:11434/v1"}
+    strat.run([_cand()], stage, ctx)
+
+    assert seen["url_host"] == "127.0.0.1"
+    assert seen["host_header"] == "localhost:11434"
