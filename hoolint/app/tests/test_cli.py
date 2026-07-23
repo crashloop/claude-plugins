@@ -158,6 +158,59 @@ def test_git_mode_reports_malformed_waivers_without_passing(project):
     assert code == 1
 
 
+def test_session_mode_tolerates_malformed_config(project, monkeypatch, capsys):
+    """A malformed hoolint.toml must report but never block (never exit 1).
+
+    Session-mode exit 1 is NOT exit 2, so a crash lets Claude stop UNBLOCKED
+    -- an ordinary typo in a committed config would defeat every block."""
+    (project / "hoolint.toml").write_text("this is = = not toml [[[")
+    code, out = _check(project, monkeypatch, capsys)
+    assert code == 0
+    assert "hoolint" in (out.out + out.err).lower()
+
+
+def test_git_mode_reports_malformed_config_without_passing(project):
+    """Same malformed hoolint.toml in git mode must fail closed (exit 1)."""
+    import subprocess
+    for args in (["init", "-b", "main"], ["config", "user.email", "t@t"],
+                 ["config", "user.name", "t"]):
+        subprocess.run(["git", *args], cwd=project, check=True, capture_output=True)
+    (project / "hoolint.toml").write_text("this is = = not toml [[[")
+    code = cli.main(["check", "--mode", "git", "--root", str(project)])
+    assert code == 1
+
+
+def test_session_mode_tolerates_waiver_missing_fingerprint(project, monkeypatch, capsys):
+    """A valid-TOML waiver entry missing `fingerprint` raises KeyError, which
+    the waivers-TOMLDecodeError handler does not catch; it must still not
+    fail open."""
+    (project / "hoolint-waivers.toml").write_text('[[waiver]]\nreason = "x"\n')
+    code, out = _check(project, monkeypatch, capsys)
+    assert code == 0
+    assert "hoolint" in (out.out + out.err).lower()
+
+
+def test_off_spec_severity_finding_is_not_silently_dropped(tmp_path, monkeypatch, capsys):
+    """A trusted custom rule with an off-spec severity (not block/warn) must
+    still surface, not vanish from the clean-run systemMessage."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    (tmp_path / "hoolint_rules").mkdir()
+    (tmp_path / "hoolint_rules" / "x.py").write_text(
+        'rule = {"id": "custom-info", "globs": ["**/*.py"], "severity": "info",\n'
+        '        "stage": [{"strategy": "regex", "pattern": "TODO",\n'
+        '                   "message": "leftover TODO"}]}\n')
+    assert cli.main(["trust", "--root", str(tmp_path)]) == 0
+    capsys.readouterr()
+    (tmp_path / "m.py").write_text("x = 1  # TODO\n")
+    from hoolint import journal
+    journal.add(tmp_path, "s1", str(tmp_path / "m.py"))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"session_id": "s1"})))
+    code = cli.main(["check", "--mode", "session", "--root", str(tmp_path)])
+    out = capsys.readouterr()
+    assert code == 0
+    assert "custom-info" in json.loads(out.out)["systemMessage"]
+
+
 def test_untrusted_custom_rules_notice_reaches_system_message(tmp_path, monkeypatch, capsys):
     """A bare print() is discarded by the Stop hook; the notice must ride the
     systemMessage JSON instead."""

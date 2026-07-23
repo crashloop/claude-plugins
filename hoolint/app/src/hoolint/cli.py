@@ -36,6 +36,12 @@ def _system_message(text: str) -> None:
 def _cmd_check(args: argparse.Namespace) -> int:
     """Run rules over the session journal or a git diff and report findings.
 
+    Fail-safe wrapper: any unexpected crash (malformed hoolint.toml, an
+    unreadable custom rule, a waiver entry missing its fingerprint) must never
+    fail OPEN. Session mode reports via systemMessage and returns 0 -- exit 1
+    there is not a block (exit 2), so a crash would silently let Claude stop.
+    Git mode fails closed at exit 1 so a pipeline still goes red.
+
     Args:
         args: Parsed CLI namespace for the `check` subcommand.
 
@@ -44,6 +50,18 @@ def _cmd_check(args: argparse.Namespace) -> int:
         Git mode: 1 if a block finding exists (or the check itself is
         broken), 0 otherwise.
     """
+    try:
+        return _run_check(args)
+    except Exception as exc:
+        msg = f"hoolint: check could not run ({exc!r})"
+        if args.mode == "git":
+            print(msg, file=sys.stderr)
+            return 1
+        _system_message(msg)
+        return 0
+
+
+def _run_check(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     extra_rules, trust_notice = trust.load_custom_rules(root)
     cfg = load_config(root, extra_rules=extra_rules)
@@ -78,7 +96,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
         return 0  # an incompletely-configured install reports but never blocks
     found = [f for f in found if f.fingerprint not in waived]
     blocks = [f for f in found if f.severity == "block"]
-    warns = [f for f in found if f.severity == "warn"]
+    warns = [f for f in found if f.severity != "block"]  # total: no severity vanishes
 
     if args.mode == "git":
         if trust_notice:
