@@ -19,16 +19,26 @@ def _config_file() -> Path:
 
 
 def rules_digest(root: Path) -> str:
-    """Digest over every rule file's name and bytes.
+    """Digest over every file in hoolint_rules/, recursively.
+
+    Covers all file types (not just *.py) so an imported helper or a data
+    sidecar can't be swapped post-grant without revoking trust. Excludes
+    __pycache__ since it's regenerated, not reviewed content.
 
     Args:
         root: Project root directory.
     """
     rules_dir = root / "hoolint_rules"
     h = hashlib.sha256()
-    for py in sorted(rules_dir.glob("*.py")) if rules_dir.is_dir() else []:
-        h.update(py.name.encode())
-        h.update(py.read_bytes())
+    if not rules_dir.is_dir():
+        return h.hexdigest()
+    files = [
+        p for p in rules_dir.rglob("*")
+        if p.is_file() and "__pycache__" not in p.relative_to(rules_dir).parts
+    ]
+    for p in sorted(files, key=lambda p: p.relative_to(rules_dir).as_posix()):
+        h.update(p.relative_to(rules_dir).as_posix().encode())
+        h.update(p.read_bytes())
     return h.hexdigest()
 
 
@@ -41,7 +51,10 @@ def is_trusted(root: Path) -> bool:
     f = _config_file()
     if not f.exists():
         return False
-    granted = tomllib.loads(f.read_text()).get("projects", {})
+    try:
+        granted = tomllib.loads(f.read_text()).get("projects", {})
+    except tomllib.TOMLDecodeError:
+        return False  # a corrupt trust store must never be treated as trusted
     return granted.get(str(root.resolve())) == rules_digest(root)
 
 
@@ -53,7 +66,10 @@ def grant(root: Path) -> None:
     """
     f = _config_file()
     f.parent.mkdir(parents=True, exist_ok=True)
-    data = tomllib.loads(f.read_text()) if f.exists() else {}
+    try:
+        data = tomllib.loads(f.read_text()) if f.exists() else {}
+    except tomllib.TOMLDecodeError:
+        data = {}  # corrupt store: start fresh rather than aborting the grant
     projects = data.get("projects", {})
     projects[str(root.resolve())] = rules_digest(root)
     f.write_text(tomlkit.dumps({"projects": projects}))
@@ -83,7 +99,9 @@ def load_custom_rules(root: Path) -> tuple[list[dict], str | None]:
         ns: dict = {}
         try:
             exec(compile(py.read_text(), str(py), "exec"), ns)  # trusted by user
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:
+            # SystemExit (e.g. sys.exit(), argparse.error()) is a BaseException,
+            # not Exception; caught explicitly so a buggy rule can't kill the check.
             failed.append(f"{py.name}: {exc}")
             continue
         if isinstance(ns.get("rule"), dict):
