@@ -11,6 +11,12 @@
       "source": "./creed",
       "description": "Injects the compressed operating core every session and prompt; gates unverified completion claims.",
       "category": "productivity"
+    },
+    {
+      "name": "hoolint",
+      "source": "./hoolint",
+      "description": "Stop-hook checks for code and docs: regex, semantic, local LLM, and in-session judgment tiers with committed waivers.",
+      "category": "productivity"
     }
   ]
 }
