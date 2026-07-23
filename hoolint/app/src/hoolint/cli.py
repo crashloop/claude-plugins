@@ -5,6 +5,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+import tomlkit
+
 from hoolint import changes, journal, state, waivers   # trust added in Task 11
 from hoolint.config import load_config
 from hoolint.engine import run as engine_run
@@ -48,9 +50,6 @@ def _cmd_check(args: argparse.Namespace) -> int:
     if args.mode == "session":
         hook = json.load(sys.stdin) if not sys.stdin.isatty() else {}
         session_id = hook.get("session_id", "default")
-        # Read but not yet used: kept for parity with the Stop-hook payload
-        # shape later tasks (trust, warmup) may branch on.
-        _stop_hook_active = bool(hook.get("stop_hook_active"))
         # Files still blocked last run stay in scope even if nothing was edited.
         seen = {p: None for p in journal.files(root, session_id)}
         seen.update({p: None for p in state.blocked_files(root) if p.exists()})
@@ -121,8 +120,19 @@ def _cmd_waive(args: argparse.Namespace) -> int:
     root = Path(args.root).resolve()
     if args.prune:
         cfg = load_config(root)
-        live = engine_run(cfg, changes.git_changed(root, "HEAD"), root, "git")
-        dropped = waivers.prune(root, {f.fingerprint for f in live})
+        try:
+            # Same broken-ref case as check --mode git; see there for the repro.
+            files = changes.git_changed(root, "HEAD")
+        except RuntimeError as exc:
+            print(f"hoolint: git change detection failed: {exc}", file=sys.stderr)
+            return 1
+        live = engine_run(cfg, files, root, "git")
+        try:
+            dropped = waivers.prune(root, {f.fingerprint for f in live})
+        except tomlkit.exceptions.ParseError as exc:
+            print(f"hoolint: {waivers.FILE} is malformed, cannot prune: {exc}",
+                  file=sys.stderr)
+            return 1
         print(f"pruned {dropped} waiver(s) whose span no longer matches")
         return 0
     record = state.finding_record(root, args.fingerprint)

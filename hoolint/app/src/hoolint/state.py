@@ -89,11 +89,17 @@ def finding_record(root: Path, fingerprint: str) -> dict | None:
 def record_findings(root: Path, records: list[dict]) -> None:
     """Remember a clean or warn-only run's findings so they stay waivable.
 
+    A no-op on an empty `records`: overwriting a still-actionable set with
+    nothing would make fingerprints hoolint just surfaced un-waivable one
+    stop later. Use `reset()` to deliberately discard state.
+
     Args:
         root: Project root directory.
         records: `Finding.record()` dicts for the surfaced (non-blocking)
             findings.
     """
+    if not records:
+        return
     ensure_dir(root)
     p = _path(root)
     p.write_text(json.dumps({"fingerprints": [], "same_set": 0,

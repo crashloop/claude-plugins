@@ -62,6 +62,28 @@ def test_stand_down_after_two_identical_blocks(project, monkeypatch, capsys):
     assert "stand" in out.out.lower()
 
 
+def test_waive_survives_a_no_edit_stop_after_stand_down(project, monkeypatch, capsys):
+    """The waive window must not close one stop after stand-down.
+
+    block, block, stand-down (fingerprint reported), then one more no-edit
+    stop with nothing in scope must still leave that fingerprint waivable.
+    """
+    _check(project, monkeypatch, capsys)
+    _check(project, monkeypatch, capsys)
+    code, out = _check(project, monkeypatch, capsys)   # stand-down
+    assert code == 0
+    fingerprint = out.out.split("[")[1].split("]")[0]
+
+    code, out = _check(project, monkeypatch, capsys)   # no edits, nothing in scope
+    assert code == 0
+    assert out.out == "" and out.err == ""
+
+    code = cli.main(["waive", fingerprint, "--reason", "user asked for it",
+                     "--root", str(project)])
+    assert code == 0
+    assert "fingerprint" in (project / "hoolint-waivers.toml").read_text()
+
+
 def test_stand_down_bounds_a_churning_loop(project, monkeypatch, capsys):
     """Editing the span changes fingerprints; the loop must still terminate."""
     f = project / "m.py"
@@ -92,7 +114,7 @@ def test_waive_rejects_unsurfaced_fingerprint(project):
     assert not (project / "hoolint-waivers.toml").exists()
 
 
-def test_git_mode_exits_1_on_block(project, monkeypatch, capsys):
+def test_git_mode_exits_1_on_block(project):
     import subprocess
     for args in (["init", "-b", "main"], ["config", "user.email", "t@t"],
                  ["config", "user.name", "t"]):
@@ -101,7 +123,7 @@ def test_git_mode_exits_1_on_block(project, monkeypatch, capsys):
     assert code == 1
 
 
-def test_git_mode_reports_broken_ref_without_passing(project, monkeypatch, capsys):
+def test_git_mode_reports_broken_ref_without_passing(project, capsys):
     """git_changed raises when HEAD has commits but no main/master exists;
     a broken check must not silently report success (exit 0)."""
     import subprocess
@@ -125,7 +147,7 @@ def test_session_mode_tolerates_malformed_waivers(project, monkeypatch, capsys):
     assert "waiver" in (out.out + out.err).lower()
 
 
-def test_git_mode_reports_malformed_waivers_without_passing(project, capsys):
+def test_git_mode_reports_malformed_waivers_without_passing(project):
     """Same malformed file in git mode must not silently pass as clean."""
     import subprocess
     for args in (["init", "-b", "main"], ["config", "user.email", "t@t"],
@@ -134,3 +156,23 @@ def test_git_mode_reports_malformed_waivers_without_passing(project, capsys):
     (project / "hoolint-waivers.toml").write_text("not [ valid toml")
     code = cli.main(["check", "--mode", "git", "--root", str(project)])
     assert code == 1
+
+
+def test_waive_prune_reports_malformed_waivers_without_traceback(project, capsys):
+    """`waive --prune` must report a malformed waivers file, not raise.
+
+    The git-unborn RuntimeError path shares its guard with this one but
+    isn't reproduced here: an unborn-HEAD repro is finicky to build
+    deterministically, while a malformed waivers file is not.
+    """
+    import subprocess
+    for args in (["init", "-b", "main"], ["config", "user.email", "t@t"],
+                 ["config", "user.name", "t"]):
+        subprocess.run(["git", *args], cwd=project, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=project, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "x"], cwd=project, check=True,
+                   capture_output=True)
+    (project / "hoolint-waivers.toml").write_text("not [ valid toml")
+    code = cli.main(["waive", "--prune", "--root", str(project)])
+    assert code == 1
+    assert "waiver" in capsys.readouterr().err.lower()
