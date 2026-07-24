@@ -107,6 +107,28 @@ def record_findings(root: Path, records: list[dict]) -> None:
                              "last_findings": records}))
 
 
+def clear_counters(root: Path) -> None:
+    """A clean stop that has nothing to record: reset the stand-down counters
+    and blocked-file scope, but keep `last_findings`.
+
+    A fully-clean run means the model made progress, so the consecutive-block
+    streak must break -- otherwise unrelated blocks separated by clean stops
+    still accumulate toward stand-down. `last_findings` is preserved so a
+    fingerprint surfaced right before the clean run stays waivable one stop
+    later (the same reason `record_findings` no-ops on an empty set).
+
+    Args:
+        root: Project root directory.
+    """
+    prev = _read(root)
+    if not prev:
+        return  # nothing recorded yet: no counters to clear
+    ensure_dir(root)
+    _path(root).write_text(json.dumps(
+        {"fingerprints": [], "same_set": 0, "consecutive": 0,
+         "blocked_files": [], "last_findings": prev.get("last_findings", [])}))
+
+
 def reset(root: Path) -> None:
     """Discard all stand-down state.
 

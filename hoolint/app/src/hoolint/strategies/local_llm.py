@@ -54,19 +54,6 @@ def _resolve_pinned_ip(base_url: str) -> str | None:
         return None
 
 
-def is_local(base_url: str) -> bool:
-    """True iff every address the host resolves to is loopback, private, or
-    link-local.
-
-    Args:
-        base_url: The configured or overridden endpoint URL.
-
-    Returns:
-        True iff the host is safe to send file content to.
-    """
-    return _resolve_pinned_ip(base_url) is not None
-
-
 class _PinnedIPTransport(httpx.BaseTransport):
     """Routes a request to a pre-resolved IP instead of letting httpx
     re-resolve the hostname at connect time.

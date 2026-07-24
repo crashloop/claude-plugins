@@ -56,9 +56,16 @@ class SemanticStrategy:
 
     def _get_encoder(self, model_name: str):
         if self._encoder is None:
-            os.environ["HF_HUB_OFFLINE"] = "1"  # never download at check time
             from model2vec import StaticModel
-            self._encoder = StaticModel.from_pretrained(model_name)
+            prev = os.environ.get("HF_HUB_OFFLINE")
+            os.environ["HF_HUB_OFFLINE"] = "1"  # never download at check time
+            try:
+                self._encoder = StaticModel.from_pretrained(model_name)
+            finally:  # scoped: don't leak the flag into a long-lived host process
+                if prev is None:
+                    os.environ.pop("HF_HUB_OFFLINE", None)
+                else:
+                    os.environ["HF_HUB_OFFLINE"] = prev
         return self._encoder
 
     def run(self, candidates: list[Finding] | None, stage: dict,

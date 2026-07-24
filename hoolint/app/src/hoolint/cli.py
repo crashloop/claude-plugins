@@ -107,7 +107,10 @@ def _run_check(args: argparse.Namespace) -> int:
 
     if not blocks:
         journal.clear(root, session_id)
-        state.record_findings(root, [f.record() for f in found])
+        if found:
+            state.record_findings(root, [f.record() for f in found])
+        else:
+            state.clear_counters(root)  # clean stop breaks the stand-down streak
         lines = [_format(f) for f in warns]
         if trust_notice:
             lines.append(trust_notice)
@@ -228,7 +231,6 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--root", default=".")
     w.set_defaults(fn=_cmd_waive)
     wu = sub.add_parser("warmup")
-    wu.add_argument("--root", default=".")
     wu.set_defaults(fn=_cmd_warmup)
     t = sub.add_parser("trust")
     t.add_argument("--root", default=".")

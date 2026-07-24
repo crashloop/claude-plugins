@@ -141,7 +141,7 @@ def test_public_address_refused_even_when_dns_returns_mixed_results(tmp_path,
             (socket.AF_INET, socket.SOCK_STREAM, 0, "", ("8.8.8.8", 0)),
         ]
     monkeypatch.setattr(mod.socket, "getaddrinfo", fake_getaddrinfo)
-    assert mod.is_local("http://mixed.example.com/v1") is False
+    assert mod._resolve_pinned_ip("http://mixed.example.com/v1") is None
 
 
 def test_dns_resolution_failure_fails_closed(monkeypatch):
@@ -152,7 +152,7 @@ def test_dns_resolution_failure_fails_closed(monkeypatch):
     def fake_getaddrinfo(host, port):
         raise socket.gaierror("name or service not known")
     monkeypatch.setattr(mod.socket, "getaddrinfo", fake_getaddrinfo)
-    assert mod.is_local("http://does-not-resolve.example.com/v1") is False
+    assert mod._resolve_pinned_ip("http://does-not-resolve.example.com/v1") is None
 
 
 def test_null_content_reply_skips_and_disarms_instead_of_crashing(tmp_path):

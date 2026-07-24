@@ -97,6 +97,31 @@ def test_stand_down_bounds_a_churning_loop(project, monkeypatch, capsys):
     assert codes == [2, 2, 0]
 
 
+def test_clean_stop_resets_the_stand_down_streak(project, monkeypatch, capsys):
+    """A fully-clean stop between blocks must break the consecutive streak.
+
+    block, block, CLEAN, block: without a counter reset on the clean stop the
+    consecutive count would reach 3 and the last block would stand down
+    (exit 0) as if the three were consecutive."""
+    from hoolint import journal
+    f = project / "m.py"
+
+    def edit(text):
+        f.write_text(text)
+        journal.add(project, "s1", str(f))
+
+    edit("# a1\n# a2\n# a3\nx = 1\n")
+    assert _check(project, monkeypatch, capsys)[0] == 2
+    edit("# b1\n# b2\n# b3\nx = 1\n")            # different span, still a block
+    assert _check(project, monkeypatch, capsys)[0] == 2
+    edit("x = 1\n")                              # clean: no findings at all
+    assert _check(project, monkeypatch, capsys)[0] == 0
+    edit("# c1\n# c2\n# c3\ny = 2\n")            # a fresh, unrelated block
+    code, out = _check(project, monkeypatch, capsys)
+    assert code == 2                             # blocks, does NOT stand down
+    assert "verbose-comments" in out.err
+
+
 def test_waived_finding_does_not_block(project, monkeypatch, capsys):
     code, out = _check(project, monkeypatch, capsys)
     fingerprint = out.err.split("[")[1].split("]")[0]

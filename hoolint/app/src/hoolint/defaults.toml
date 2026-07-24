@@ -30,7 +30,6 @@ strategy = "local_llm"
 op = "and"
 model = "qwen3:4b"
 max_candidates = 10
-budget_seconds = 60
 prompt = """Judge each numbered comment block below.
 Reply with one line per block: `[N] VIOLATION: <reason>` or `[N] OK: <reason>`.
 VIOLATION if the comment merely restates the adjacent code or pads with filler.
