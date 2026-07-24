@@ -6,6 +6,22 @@ and blocks the stop until findings are fixed or waived.
 
 Name: **hoolint** = hook + lint.
 
+## Install
+
+Requires [`uv`](https://docs.astral.sh/uv/) on PATH — the hooks run the checker
+with `uv run --project`. In Claude Code:
+
+```
+/plugin marketplace add crashloop/claude-plugins
+/plugin install hoolint@crashloop-plugins
+```
+
+On first session start hoolint warms the embedding model in the background;
+`hoolint warmup` does it on demand. The `semantic` tier is skipped (findings
+demote to advisory) until the model is ready, and the `local_llm` tier is
+skipped unless a local OpenAI-compatible endpoint is up — so hoolint works with
+neither, just with fewer tiers.
+
 ## How it works
 
 1. `PostToolUse` journals every file Claude writes or edits.
@@ -46,5 +62,28 @@ content — adding or editing a rule re-arms the prompt.
 
 `local_llm.base_url` is restricted to loopback and private addresses, so a
 project's config cannot ship your code to a public host.
+
+## Custom rules
+
+Drop a `.py` file in `hoolint_rules/` that assigns a module-level `rule` dict:
+
+```python
+# hoolint_rules/no_fixme.py
+rule = {
+    "id": "no-fixme",
+    "globs": ["**/*.py"],
+    "severity": "block",              # or "warn"
+    "stage": [
+        {"strategy": "regex", "pattern": "(?m)^.*FIXME.*$",
+         "message": "unresolved FIXME"},
+    ],
+}
+```
+
+Custom rules execute arbitrary Python, so they load only after you run
+`hoolint trust`, which pins the grant to the exact content of `hoolint_rules/`
+— editing or adding a rule (or any file it reads) revokes trust and re-prompts.
+Stages chain the same strategies the stock rules use (`regex`, `semantic`,
+`local_llm`, `escalate`).
 
 See `CONTEXT.md` for the vocabulary.
