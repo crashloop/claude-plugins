@@ -290,3 +290,46 @@ def test_waive_prune_reports_malformed_waivers_without_traceback(project, capsys
     code = cli.main(["waive", "--prune", "--root", str(project)])
     assert code == 1
     assert "waiver" in capsys.readouterr().err.lower()
+
+
+def test_waive_prune_keeps_waivers_for_session_only_rules(tmp_path, capsys):
+    """`--prune` ran a git-mode check only, so every session-only waiver looked dead.
+
+    Deleting a live waiver destroys a committed team approval, which is worse than
+    keeping a stale one. The prune set must cover every rule, not one mode's subset.
+    """
+    import subprocess
+    from hoolint.config import load_config
+    from hoolint.engine import run as engine_run
+
+    for args in (["init", "-b", "main"], ["config", "user.email", "t@t"],
+                 ["config", "user.name", "t"]):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "hoolint.toml").write_text(
+        '[[rule]]\n'
+        'id = "session-only"\n'
+        'globs = ["**/*.py"]\n'
+        'severity = "warn"\n'
+        'modes = ["session"]\n'
+        '[[rule.stage]]\n'
+        'strategy = "regex"\n'
+        'pattern = "(?m)^.*FIXME.*$"\n'
+        'message = "unresolved FIXME"\n'
+    )
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-m", "x"], cwd=tmp_path, check=True,
+                   capture_output=True)
+    f = tmp_path / "a.py"
+    f.write_text("# FIXME: later\n")   # untracked, so git_changed sees it
+
+    live = engine_run(load_config(tmp_path), [f], tmp_path, "session")
+    fp = next(x.fingerprint for x in live if x.rule_id == "session-only")
+    (tmp_path / "hoolint-waivers.toml").write_text(
+        f'[[waiver]]\nfingerprint = "{fp}"\nrule_id = "session-only"\n'
+        'file = "a.py"\nlines = "1-1"\nspan = "# FIXME: later"\n'
+        'reason = "team said so"\n')
+
+    code = cli.main(["waive", "--prune", "--root", str(tmp_path)])
+    assert code == 0
+    assert "pruned 0" in capsys.readouterr().out
+    assert fp in (tmp_path / "hoolint-waivers.toml").read_text()

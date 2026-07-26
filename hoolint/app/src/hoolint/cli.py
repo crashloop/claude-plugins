@@ -159,9 +159,13 @@ def _cmd_waive(args: argparse.Namespace) -> int:
         except RuntimeError as exc:
             print(f"hoolint: git change detection failed: {exc}", file=sys.stderr)
             return 1
-        live = engine_run(cfg, files, root, "git")
+        # Both modes over the same files: a rule the prune run skipped would have no
+        # live fingerprints, so its waivers would all look dead and be deleted.
+        live = {f.fingerprint
+                for mode in ("git", "session")
+                for f in engine_run(cfg, files, root, mode)}
         try:
-            dropped = waivers.prune(root, {f.fingerprint for f in live})
+            dropped = waivers.prune(root, live)
         except tomlkit.exceptions.ParseError as exc:
             print(f"hoolint: {waivers.FILE} is malformed, cannot prune: {exc}",
                   file=sys.stderr)
