@@ -76,10 +76,18 @@ def test_derived_path_escaping_the_root_raises(tmp_path):
         CompanionStrategy().run(None, stage, ctx)
 
 
-def test_companion_ignores_incoming_candidates(tmp_path):
-    """Generators never filter. A non-None candidate list means a misconfigured stage."""
+def test_companion_chained_after_a_stage_raises(tmp_path):
+    """Generators never filter. Returning [] here would silently discard the earlier stage."""
     ctx = _ctx(tmp_path, "src/api.py", ["src/api.py"])
-    assert CompanionStrategy().run([], {"requires": "CHANGELOG.md"}, ctx) == []
+    with pytest.raises(ValueError, match="cannot follow another stage"):
+        CompanionStrategy().run([], {"requires": "CHANGELOG.md"}, ctx)
+
+
+def test_change_size_chained_after_a_stage_raises(tmp_path):
+    from hoolint.strategies.changeset_ import ChangeSizeStrategy
+    ctx = _ctx(tmp_path, "a.py", ["a.py", "b.py", "c.py"])
+    with pytest.raises(ValueError, match="cannot follow another stage"):
+        ChangeSizeStrategy().run([], {"max_files": 2}, ctx)
 
 
 def test_change_size_under_limit_is_silent(tmp_path):

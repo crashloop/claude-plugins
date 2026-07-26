@@ -27,7 +27,7 @@ class CompanionStrategy:
         """Flag this file if the companion it requires is absent from the change set.
 
         Args:
-            candidates: Ignored; this strategy generates rather than filters.
+            candidates: Must be None; this strategy generates rather than filters.
             stage: Stage config: `requires`, or `requires_from` plus `requires_to`, and an
                 optional `message`.
             ctx: Per-file execution context.
@@ -36,11 +36,13 @@ class CompanionStrategy:
             One finding if the companion did not change, otherwise an empty list.
 
         Raises:
-            ValueError: If the stage config is contradictory or incomplete, or if a derived
-                path escapes the project root.
+            ValueError: If the stage config is contradictory or incomplete, if a derived
+                path escapes the project root, or if the stage was chained after another.
         """
         if candidates is not None:
-            return []
+            raise ValueError(
+                "companion is a generator; it cannot follow another stage. "
+                "Put it first, or chain it with op = \"or\".")
         target = self._target(stage, ctx)
         if target is None:
             return []
@@ -98,15 +100,20 @@ class ChangeSizeStrategy:
         records paths only, so a line threshold would silently mean nothing in session mode.
 
         Args:
-            candidates: Ignored; this strategy generates rather than filters.
+            candidates: Must be None; this strategy generates rather than filters.
             stage: Stage config: `max_files` (default 20) and an optional `message`.
             ctx: Per-file execution context.
 
         Returns:
             One finding when the change set exceeds `max_files`, otherwise an empty list.
+
+        Raises:
+            ValueError: If the stage was chained after another.
         """
         if candidates is not None:
-            return []
+            raise ValueError(
+                "change_size is a generator; it cannot follow another stage. "
+                "Put it first, or chain it with op = \"or\".")
         if not ctx.matched or ctx.path != sorted(ctx.matched)[0]:
             return []
         max_files = stage.get("max_files", 20)

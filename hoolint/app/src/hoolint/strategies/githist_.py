@@ -39,7 +39,7 @@ class ChurnStrategy:
         """Flag this file when its recent commit count exceeds the threshold.
 
         Args:
-            candidates: Ignored; this strategy generates rather than filters.
+            candidates: Must be None; this strategy generates rather than filters.
             stage: Stage config: `max_commits` (default 5), `window` (default "30.days",
                 passed to `git log --since`), and an optional `message`.
             ctx: Per-file execution context.
@@ -49,9 +49,12 @@ class ChurnStrategy:
 
         Raises:
             RuntimeError: If git fails. The engine's guard turns this into a visible warn.
+            ValueError: If the stage was chained after another.
         """
         if candidates is not None:
-            return []
+            raise ValueError(
+                "churn is a generator; it cannot follow another stage. "
+                "Put it first, or chain it with op = \"or\".")
         if not _has_commits(ctx):
             return []
         rel = str(ctx.path.relative_to(ctx.root))
@@ -79,7 +82,7 @@ class CommitMetaStrategy:
         Stop time in a session there is usually no new commit to inspect.
 
         Args:
-            candidates: Ignored; this strategy generates rather than filters.
+            candidates: Must be None; this strategy generates rather than filters.
             stage: Stage config: `subject_pattern`, an re2 pattern matched against the whole
                 subject, and an optional `message`.
             ctx: Per-file execution context.
@@ -90,9 +93,12 @@ class CommitMetaStrategy:
         Raises:
             RuntimeError: If git fails. The engine's guard turns this into a visible warn.
             KeyError: If `subject_pattern` is absent, which is a config error.
+            ValueError: If the stage was chained after another.
         """
         if candidates is not None:
-            return []
+            raise ValueError(
+                "commit_meta is a generator; it cannot follow another stage. "
+                "Put it first, or chain it with op = \"or\".")
         if not ctx.matched or ctx.path != sorted(ctx.matched)[0]:
             return []
         if not _has_commits(ctx):

@@ -207,3 +207,24 @@ def test_modes_restricts_which_rules_run(tmp_path):
         assert calls == ["git"]       # ran: right mode
     finally:
         del STRATEGIES["probe2"]
+
+
+def test_metadata_stage_chained_second_is_visible_never_a_silent_clean(tmp_path):
+    """A generator in second position must not annihilate what the first stage found.
+
+    Chaining is a config error. The engine's guard turns the raised ValueError into a
+    visible warn finding; returning [] instead would make a misconfigured rule read as a
+    clean check, which is the defect class this codebase treats as unacceptable.
+    """
+    f = tmp_path / "a.py"
+    f.write_text("# FIXME: later\n")
+    cfg = Config(rules=[{"id": "chained", "globs": ["**/*.py"], "severity": "warn",
+                         "stage": [{"strategy": "regex", "pattern": "(?m)^.*FIXME.*$",
+                                    "message": "unresolved FIXME"},
+                                   {"strategy": "companion",
+                                    "requires": "CHANGELOG.md"}]}],
+                settings={})
+    out = run(cfg, [f], tmp_path, "git")
+    assert out, "a chained generator produced no findings: a broken rule read as clean"
+    assert "cannot follow another stage" in out[0].message
+    assert out[0].severity == "warn"

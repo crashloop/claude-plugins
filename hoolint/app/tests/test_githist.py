@@ -1,5 +1,7 @@
 import subprocess
 
+import pytest
+
 from hoolint.config import Config
 from hoolint.engine import run
 from hoolint.strategies.base import Context
@@ -74,10 +76,12 @@ def test_git_failure_is_visible_never_a_silent_clean(tmp_path):
     assert out[0].severity == "warn"
 
 
-def test_churn_ignores_incoming_candidates(tmp_path):
+def test_churn_chained_after_a_stage_raises(tmp_path):
+    """Generators never filter. Returning [] here would silently discard the earlier stage."""
     repo = _repo(tmp_path)
     _commit_n_times(repo, "a.py", 4)
-    assert ChurnStrategy().run([], {"max_commits": 0}, _ctx(repo, "a.py")) == []
+    with pytest.raises(ValueError, match="cannot follow another stage"):
+        ChurnStrategy().run([], {"max_commits": 0}, _ctx(repo, "a.py"))
 
 
 CONVENTION = r"(feat|fix|docs|test|chore)(\(.+\))?: .+"
@@ -114,6 +118,17 @@ def test_commit_meta_on_unborn_head_is_silent(tmp_path):
     out = CommitMetaStrategy().run(None, {"subject_pattern": CONVENTION},
                                    _ctx(repo, "a.py"))
     assert out == []
+
+
+def test_commit_meta_chained_after_a_stage_raises(tmp_path):
+    """Generators never filter. Returning [] here would silently discard the earlier stage."""
+    from hoolint.strategies.githist_ import CommitMetaStrategy
+    repo = _repo(tmp_path)
+    (repo / "a.py").write_text("x = 1\n")
+    _git(repo, "add", "a.py")
+    _git(repo, "commit", "-m", "did some stuff")
+    with pytest.raises(ValueError, match="cannot follow another stage"):
+        CommitMetaStrategy().run([], {"subject_pattern": CONVENTION}, _ctx(repo, "a.py"))
 
 
 def test_commit_meta_emits_exactly_once_across_matched_files(tmp_path):
