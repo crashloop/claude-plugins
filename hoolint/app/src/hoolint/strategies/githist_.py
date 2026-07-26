@@ -4,6 +4,7 @@ Every git failure raises. `engine._guarded` converts the exception into a visibl
 so a missing binary, a non-repository, or a non-zero exit can never read as a clean check. That
 reuses one tested degradation path rather than adding a second.
 """
+import re2
 from hoolint.changes import run_git
 from hoolint.findings import Finding
 from hoolint.strategies.base import Context, anchored_finding
@@ -63,4 +64,42 @@ class ChurnStrategy:
         message = stage.get(
             "message",
             f"{rel} changed {count} times in {window} (max {max_commits})")
+        return [anchored_finding(ctx, message)]
+
+
+class CommitMetaStrategy:
+    """Generator: flags a commit subject that breaks the project's convention."""
+
+    def run(self, candidates: list[Finding] | None, stage: dict,
+            ctx: Context) -> list[Finding]:
+        """Judge the most recent commit subject against a pattern, once per run.
+
+        The subject describes the whole change, so this emits only from a deterministic anchor,
+        the first matched file in sorted order. In practice this rule belongs in git mode: at
+        Stop time in a session there is usually no new commit to inspect.
+
+        Args:
+            candidates: Ignored; this strategy generates rather than filters.
+            stage: Stage config: `subject_pattern`, an re2 pattern matched against the whole
+                subject, and an optional `message`.
+            ctx: Per-file execution context.
+
+        Returns:
+            One finding when the subject does not match, otherwise an empty list.
+
+        Raises:
+            RuntimeError: If git fails. The engine's guard turns this into a visible warn.
+            KeyError: If `subject_pattern` is absent, which is a config error.
+        """
+        if candidates is not None:
+            return []
+        if not ctx.matched or ctx.path != sorted(ctx.matched)[0]:
+            return []
+        if not _has_commits(ctx):
+            return []
+        subject = run_git(ctx.root, "log", "-1", "--format=%s").stdout.strip()
+        if re2.fullmatch(stage["subject_pattern"], subject):
+            return []
+        message = stage.get(
+            "message", f"commit subject does not match the convention: {subject!r}")
         return [anchored_finding(ctx, message)]

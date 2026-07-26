@@ -78,3 +78,57 @@ def test_churn_ignores_incoming_candidates(tmp_path):
     repo = _repo(tmp_path)
     _commit_n_times(repo, "a.py", 4)
     assert ChurnStrategy().run([], {"max_commits": 0}, _ctx(repo, "a.py")) == []
+
+
+CONVENTION = r"(feat|fix|docs|test|chore)(\(.+\))?: .+"
+
+
+def test_commit_meta_accepts_a_conforming_subject(tmp_path):
+    from hoolint.strategies.githist_ import CommitMetaStrategy
+    repo = _repo(tmp_path)
+    (repo / "a.py").write_text("x = 1\n")
+    _git(repo, "add", "a.py")
+    _git(repo, "commit", "-m", "feat(api): add the thing")
+    out = CommitMetaStrategy().run(None, {"subject_pattern": CONVENTION},
+                                   _ctx(repo, "a.py"))
+    assert out == []
+
+
+def test_commit_meta_flags_a_malformed_subject(tmp_path):
+    from hoolint.strategies.githist_ import CommitMetaStrategy
+    repo = _repo(tmp_path)
+    (repo / "a.py").write_text("x = 1\n")
+    _git(repo, "add", "a.py")
+    _git(repo, "commit", "-m", "did some stuff")
+    out = CommitMetaStrategy().run(None, {"subject_pattern": CONVENTION},
+                                   _ctx(repo, "a.py"))
+    assert len(out) == 1
+    assert "did some stuff" in out[0].message
+
+
+def test_commit_meta_on_unborn_head_is_silent(tmp_path):
+    """No commit exists yet, so there is no subject to judge."""
+    from hoolint.strategies.githist_ import CommitMetaStrategy
+    repo = _repo(tmp_path)
+    (repo / "a.py").write_text("x = 1\n")
+    out = CommitMetaStrategy().run(None, {"subject_pattern": CONVENTION},
+                                   _ctx(repo, "a.py"))
+    assert out == []
+
+
+def test_commit_meta_emits_exactly_once_across_matched_files(tmp_path):
+    """The commit subject describes the whole change, so it must not repeat per file."""
+    repo = _repo(tmp_path)
+    files = []
+    for i in range(4):
+        p = repo / f"f{i}.py"
+        p.write_text("x = 1\n")
+        files.append(p)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-m", "did some stuff")
+    cfg = Config(rules=[{"id": "commit-subject", "globs": ["**/*.py"], "severity": "warn",
+                         "stage": [{"strategy": "commit_meta",
+                                    "subject_pattern": CONVENTION}]}],
+                 settings={})
+    out = run(cfg, files, repo, "git")
+    assert len(out) == 1, f"expected one set-level finding, got {len(out)}"
