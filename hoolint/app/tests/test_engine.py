@@ -154,3 +154,31 @@ def test_escalate_marks_in_session_and_keeps_severity_in_git(tmp_path):
     assert not git[0].needs_judgment
     assert git[0].severity == "block"          # CI can still fail
     assert any("not-judged" in n for n in git[0].notes)
+
+
+def test_context_carries_changed_and_matched(tmp_path):
+    """Strategies need the whole change set, not just the file they run on."""
+    py = tmp_path / "a.py"
+    py.write_text("x = 1\n")
+    md = tmp_path / "notes.md"
+    md.write_text("hello\n")
+    seen = {}
+
+    class Probe:
+        def run(self, candidates, stage, ctx):
+            seen["changed"] = sorted(p.name for p in ctx.changed)
+            seen["matched"] = sorted(p.name for p in ctx.matched)
+            return []
+
+    STRATEGIES["probe"] = Probe()
+    try:
+        cfg = Config(rules=[{"id": "probe-rule", "globs": ["**/*.py"],
+                             "severity": "warn",
+                             "stage": [{"strategy": "probe"}]}],
+                     settings={})
+        run(cfg, [py, md], tmp_path, "git")
+    finally:
+        del STRATEGIES["probe"]
+
+    assert seen["changed"] == ["a.py", "notes.md"]   # full change set
+    assert seen["matched"] == ["a.py"]               # only the glob subset

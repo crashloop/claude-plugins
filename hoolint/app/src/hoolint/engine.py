@@ -17,7 +17,8 @@ def _run_rule(rule: dict, files: list[Path], root: Path, mode: str,
     out: list[Finding] = []
     for path in matched:
         ctx = Context(path=path, root=root, mode=mode, settings=settings,
-                      rule_id=rule["id"], severity=rule.get("severity", "warn"))
+                      rule_id=rule["id"], severity=rule.get("severity", "warn"),
+                      changed=files, matched=matched)
         cands: list[Finding] | None = None
         for stage in rule.get("stage", []):
             strat = STRATEGIES[stage["strategy"]]
