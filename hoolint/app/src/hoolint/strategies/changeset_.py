@@ -8,15 +8,12 @@ from pathlib import Path
 import re2
 
 from hoolint.findings import Finding
-from hoolint.strategies.base import Context, anchored_finding
+from hoolint.strategies.base import Context, anchored_finding, rel_to_root
 
 
 def _rel(p: Path, ctx: Context) -> str:
     """The path relative to the project root, resolving both sides."""
-    try:
-        return str(p.resolve().relative_to(ctx.root.resolve()))
-    except ValueError:
-        return str(p)
+    return rel_to_root(p, ctx.root)
 
 
 class CompanionStrategy:

@@ -7,7 +7,7 @@ reuses one tested degradation path rather than adding a second.
 import re2
 from hoolint.changes import run_git
 from hoolint.findings import Finding
-from hoolint.strategies.base import Context, anchored_finding
+from hoolint.strategies.base import Context, anchored_finding, rel_to_root
 
 
 def _has_commits(ctx: Context) -> bool:
@@ -57,7 +57,7 @@ class ChurnStrategy:
                 "Put it first, or chain it with op = \"or\".")
         if not _has_commits(ctx):
             return []
-        rel = str(ctx.path.relative_to(ctx.root))
+        rel = rel_to_root(ctx.path, ctx.root)
         window = stage.get("window", "30.days")
         out = run_git(ctx.root, "log", f"--since={window}", "--format=%H", "--", rel)
         count = len([line for line in out.stdout.splitlines() if line.strip()])

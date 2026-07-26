@@ -147,3 +147,20 @@ def test_commit_meta_emits_exactly_once_across_matched_files(tmp_path):
                  settings={})
     out = run(cfg, files, repo, "git")
     assert len(out) == 1, f"expected one set-level finding, got {len(out)}"
+
+
+def test_churn_works_under_a_symlinked_root(tmp_path):
+    """Churn resolves both sides too, so it behaves like the other metadata rules."""
+    real = tmp_path / "real"
+    real.mkdir()
+    repo = _repo(real)
+    _commit_n_times(repo, "a.py", 4)
+    link = tmp_path / "link"
+    link.symlink_to(real)
+
+    ctx = Context(path=link / "a.py", root=real, mode="git", settings={},
+                  rule_id="churn-rule", severity="warn",
+                  changed=[link / "a.py"], matched=[link / "a.py"])
+    out = ChurnStrategy().run(None, {"max_commits": 2}, ctx)
+    assert len(out) == 1
+    assert out[0].file == "a.py"

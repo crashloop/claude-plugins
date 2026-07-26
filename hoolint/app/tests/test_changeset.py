@@ -128,3 +128,29 @@ def test_change_size_counts_the_whole_change_set_not_the_glob_subset(tmp_path):
     out = ChangeSizeStrategy().run(None, {"max_files": 3}, ctx)
     assert len(out) == 1
     assert "4" in out[0].message
+
+
+def test_metadata_rule_works_under_a_symlinked_root(tmp_path):
+    """An unresolved path under a symlinked root must not break every metadata rule.
+
+    The engine admits a file on its resolved form but keeps the original, and the session
+    journal records the path the tool reported. Under a symlinked project directory the two
+    spellings differ, and a bare relative_to turned the whole feature into "rule failed".
+    """
+    from hoolint.config import Config
+    from hoolint.engine import run
+
+    real = tmp_path / "real"
+    (real / "src").mkdir(parents=True)
+    (real / "src" / "a.py").write_text("x = 1\n")
+    link = tmp_path / "link"
+    link.symlink_to(real)
+
+    cfg = Config(rules=[{"id": "api-changelog", "globs": ["**/*.py"], "severity": "warn",
+                         "stage": [{"strategy": "companion",
+                                    "requires": "CHANGELOG.md"}]}],
+                 settings={})
+    out = run(cfg, [link / "src" / "a.py"], real, "git")
+    assert len(out) == 1
+    assert "rule failed" not in out[0].message
+    assert out[0].file == "src/a.py"

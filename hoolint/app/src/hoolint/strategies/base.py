@@ -50,6 +50,27 @@ class Context:
         self.filter_skipped = True
 
 
+def rel_to_root(path: Path, root: Path) -> str:
+    """The path relative to the project root, resolving both sides.
+
+    Both sides are resolved because unresolved paths are normal input: the engine admits a
+    file on the strength of its resolved form but keeps the original, and the session journal
+    records the path a tool reported. Under a symlinked project directory the two spellings
+    disagree, and a bare `relative_to` would raise on every metadata rule.
+
+    Args:
+        path: File path to express relative to the root.
+        root: Project root directory.
+
+    Returns:
+        The relative path, or the path's own string when it lies outside the root.
+    """
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except ValueError:
+        return str(path)
+
+
 def anchored_finding(ctx: Context, message: str) -> Finding:
     """Build a finding anchored to the file itself, for rules with no code span.
 
@@ -65,6 +86,6 @@ def anchored_finding(ctx: Context, message: str) -> Finding:
     Returns:
         A Finding anchored to ctx.path, carrying the rule's configured severity.
     """
-    rel = str(ctx.path.relative_to(ctx.root))
+    rel = rel_to_root(ctx.path, ctx.root)
     return Finding(rule_id=ctx.rule_id, file=rel, start_line=1, end_line=1,
                    span_text=rel, message=message, severity=ctx.severity)
