@@ -80,3 +80,43 @@ def test_companion_ignores_incoming_candidates(tmp_path):
     """Generators never filter. A non-None candidate list means a misconfigured stage."""
     ctx = _ctx(tmp_path, "src/api.py", ["src/api.py"])
     assert CompanionStrategy().run([], {"requires": "CHANGELOG.md"}, ctx) == []
+
+
+def test_change_size_under_limit_is_silent(tmp_path):
+    from hoolint.strategies.changeset_ import ChangeSizeStrategy
+    ctx = _ctx(tmp_path, "a.py", ["a.py", "b.py"])
+    assert ChangeSizeStrategy().run(None, {"max_files": 5}, ctx) == []
+
+
+def test_change_size_over_limit_is_flagged(tmp_path):
+    from hoolint.strategies.changeset_ import ChangeSizeStrategy
+    ctx = _ctx(tmp_path, "a.py", ["a.py", "b.py", "c.py"])
+    out = ChangeSizeStrategy().run(None, {"max_files": 2}, ctx)
+    assert len(out) == 1
+    assert "3" in out[0].message
+
+
+def test_change_size_emits_exactly_once_across_matched_files(tmp_path):
+    """The check describes the whole change set, so it must not repeat per file."""
+    from hoolint.config import Config
+    from hoolint.engine import run
+
+    files = []
+    for i in range(5):
+        p = tmp_path / f"f{i}.py"
+        p.write_text("x = 1\n")
+        files.append(p)
+    cfg = Config(rules=[{"id": "blast-radius", "globs": ["**/*.py"], "severity": "warn",
+                         "stage": [{"strategy": "change_size", "max_files": 2}]}],
+                 settings={})
+    out = run(cfg, files, tmp_path, "git")
+    assert len(out) == 1, f"expected one set-level finding, got {len(out)}"
+
+
+def test_change_size_counts_the_whole_change_set_not_the_glob_subset(tmp_path):
+    """Blast radius is about the whole change, even when the rule's globs are narrow."""
+    from hoolint.strategies.changeset_ import ChangeSizeStrategy
+    ctx = _ctx(tmp_path, "a.py", ["a.py", "b.md", "c.md", "d.md"])
+    out = ChangeSizeStrategy().run(None, {"max_files": 3}, ctx)
+    assert len(out) == 1
+    assert "4" in out[0].message

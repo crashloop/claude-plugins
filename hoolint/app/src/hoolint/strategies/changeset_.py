@@ -80,3 +80,39 @@ class CompanionStrategy:
         if not (ctx.root / derived).resolve().is_relative_to(ctx.root.resolve()):
             raise ValueError(f"companion: derived path escapes the project root: {derived}")
         return derived
+
+
+class ChangeSizeStrategy:
+    """Generator: flags a change set that touches too many files."""
+
+    def run(self, candidates: list[Finding] | None, stage: dict,
+            ctx: Context) -> list[Finding]:
+        """Flag an oversized change, reporting once for the whole set.
+
+        The engine invokes a strategy once per matched file, but this check describes the whole
+        change set. It therefore emits only from a deterministic anchor, the first matched file
+        in sorted order, so the run yields exactly one finding with a stable fingerprint.
+
+        `max_files` counts the entire change set, not the rule's glob subset, because blast
+        radius is the point. Line counts are deliberately unsupported: the session journal
+        records paths only, so a line threshold would silently mean nothing in session mode.
+
+        Args:
+            candidates: Ignored; this strategy generates rather than filters.
+            stage: Stage config: `max_files` (default 20) and an optional `message`.
+            ctx: Per-file execution context.
+
+        Returns:
+            One finding when the change set exceeds `max_files`, otherwise an empty list.
+        """
+        if candidates is not None:
+            return []
+        if not ctx.matched or ctx.path != sorted(ctx.matched)[0]:
+            return []
+        max_files = stage.get("max_files", 20)
+        count = len(ctx.changed)
+        if count <= max_files:
+            return []
+        message = stage.get(
+            "message", f"change touches {count} files (max {max_files})")
+        return [anchored_finding(ctx, message)]
