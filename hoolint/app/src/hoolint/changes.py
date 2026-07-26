@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 
 
-def _run(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def run_git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
     """Run a git command in root.
 
     Args:
@@ -40,10 +40,10 @@ def git_changed(root: Path, ref: str = "auto") -> list[Path]:
     """
     diff_ref = None
     if ref == "auto":
-        head = _run(root, "rev-parse", "--verify", "HEAD", check=False)
+        head = run_git(root, "rev-parse", "--verify", "HEAD", check=False)
         if head.returncode == 0:
             for base in ("main", "master"):
-                r = _run(root, "merge-base", "HEAD", base, check=False)
+                r = run_git(root, "merge-base", "HEAD", base, check=False)
                 if r.returncode == 0:
                     diff_ref = r.stdout.strip()
                     break
@@ -57,9 +57,9 @@ def git_changed(root: Path, ref: str = "auto") -> list[Path]:
 
     diff = []
     if diff_ref is not None:
-        diff = _split_nul(_run(root, "diff", "--name-only", "-z", diff_ref).stdout)
+        diff = _split_nul(run_git(root, "diff", "--name-only", "-z", diff_ref).stdout)
     untracked = _split_nul(
-        _run(root, "ls-files", "--others", "--exclude-standard", "-z").stdout)
+        run_git(root, "ls-files", "--others", "--exclude-standard", "-z").stdout)
 
     root_resolved = root.resolve()
     out: dict[Path, None] = {}
