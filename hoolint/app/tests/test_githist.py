@@ -1,5 +1,4 @@
 import subprocess
-from pathlib import Path
 
 from hoolint.config import Config
 from hoolint.engine import run
