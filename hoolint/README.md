@@ -63,6 +63,75 @@ content — adding or editing a rule re-arms the prompt.
 `local_llm.base_url` is restricted to loopback and private addresses, so a
 project's config cannot ship your code to a public host.
 
+## Metadata rules
+
+These check the change set and repository history rather than the contents of one file. None is
+enabled by default, because CHANGELOG paths and test layouts differ per project. Copy what you
+need into `hoolint.toml`.
+
+`modes` restricts a rule to `session` (the model's edits since the last check) or `git` (the
+diff against a ref). Omit it and the rule runs in both. Note that "changed" differs between
+them: in git mode a CHANGELOG entry added earlier on the branch satisfies a companion rule,
+while in session mode only files touched since the last check count.
+
+```toml
+# Public API changed without a CHANGELOG entry.
+[[rule]]
+id = "api-changelog"
+globs = ["src/api/**/*.py"]
+severity = "warn"
+modes = ["git"]
+[[rule.stage]]
+strategy = "companion"
+requires = "CHANGELOG.md"
+message = "public API changed without a CHANGELOG entry"
+
+# Source changed without its test. `requires_to` is an re2 substitution.
+[[rule]]
+id = "source-needs-test"
+globs = ["src/**/*.py"]
+severity = "warn"
+[[rule.stage]]
+strategy = "companion"
+requires_from = "src/(.*)\\.py"
+requires_to = "tests/test_\\1.py"
+
+# Too much at once.
+[[rule]]
+id = "blast-radius"
+globs = ["**/*"]
+severity = "warn"
+[[rule.stage]]
+strategy = "change_size"
+max_files = 20
+
+# A file being revised over and over.
+[[rule]]
+id = "churning-file"
+globs = ["src/**/*.py"]
+severity = "warn"
+[[rule.stage]]
+strategy = "churn"
+max_commits = 5
+window = "30.days"
+
+# Commit subject convention. Git mode only: at Stop time there is usually no new commit.
+[[rule]]
+id = "commit-subject"
+globs = ["**/*"]
+severity = "warn"
+modes = ["git"]
+[[rule.stage]]
+strategy = "commit_meta"
+subject_pattern = "(feat|fix|docs|test|chore)(\\(.+\\))?: .+"
+```
+
+Waivers on metadata findings are **durable**. A metadata finding has no code span, so it is
+anchored to the file's path and its fingerprint does not change when the file's contents do.
+Waiving one records a lasting decision, such as "this file is exempt from needing a CHANGELOG
+entry", rather than an exception that expires on the next edit. This is deliberate, and differs
+from span-anchored code rules, whose waivers stop matching once the excused span changes.
+
 ## Custom rules
 
 Drop a `.py` file in `hoolint_rules/` that assigns a module-level `rule` dict:
