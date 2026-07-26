@@ -126,11 +126,23 @@ strategy = "commit_meta"
 subject_pattern = "(feat|fix|docs|test|chore)(\\(.+\\))?: .+"
 ```
 
-Waivers on metadata findings are **durable**. A metadata finding has no code span, so it is
-anchored to the file's path and its fingerprint does not change when the file's contents do.
-Waiving one records a lasting decision, such as "this file is exempt from needing a CHANGELOG
-entry", rather than an exception that expires on the next edit. This is deliberate, and differs
-from span-anchored code rules, whose waivers stop matching once the excused span changes.
+Waivers on `companion` and `churn` findings are **durable**. Those findings have no code span,
+so each is anchored to the offending file's path and its fingerprint does not change when the
+file's contents do. Waiving one records a lasting decision, such as "this file is exempt from
+needing a CHANGELOG entry", rather than an exception that expires on the next edit. This is
+deliberate, and differs from span-anchored code rules, whose waivers stop matching once the
+excused span changes.
+
+`change_size` and `commit_meta` describe the whole change rather than one file, so they anchor
+to an arbitrary file — the first matched path in sorted order. Waiving them is **not** a
+supported durable decision. A `change_size` waiver stops matching as soon as that file leaves
+the change set, so it excuses nothing next time. A `commit_meta` waiver fails the other way:
+with `globs = ["**/*"]` a repository usually has a stable alphabetically-first path, so one
+waiver can silence the subject convention indefinitely.
+
+Findings from a `modes = ["git"]` rule cannot be waived with `hoolint waive`. A git-mode check
+prints them but does not record them, and `waive` refuses any fingerprint the last check did not
+report. Waive those by hand-editing `hoolint-waivers.toml`.
 
 ## Custom rules
 
