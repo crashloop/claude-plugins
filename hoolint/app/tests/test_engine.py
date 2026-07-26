@@ -182,3 +182,28 @@ def test_context_carries_changed_and_matched(tmp_path):
 
     assert seen["changed"] == ["a.py", "notes.md"]   # full change set
     assert seen["matched"] == ["a.py"]               # only the glob subset
+
+
+def test_modes_restricts_which_rules_run(tmp_path):
+    """A git-only rule must not run in session mode, and must run in git mode."""
+    py = tmp_path / "a.py"
+    py.write_text("x = 1\n")
+    calls = []
+
+    class Probe:
+        def run(self, candidates, stage, ctx):
+            calls.append(ctx.mode)
+            return []
+
+    STRATEGIES["probe2"] = Probe()
+    try:
+        cfg = Config(rules=[{"id": "git-only", "globs": ["**/*.py"],
+                             "severity": "warn", "modes": ["git"],
+                             "stage": [{"strategy": "probe2"}]}],
+                     settings={})
+        run(cfg, [py], tmp_path, "session")
+        assert calls == []            # skipped: wrong mode
+        run(cfg, [py], tmp_path, "git")
+        assert calls == ["git"]       # ran: right mode
+    finally:
+        del STRATEGIES["probe2"]

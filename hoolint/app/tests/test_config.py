@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 from hoolint.config import load_config
 
@@ -34,3 +35,21 @@ def test_extra_rules_merge_last_and_override_project(tmp_path):
     by_id = {r["id"]: r for r in cfg.rules}
     assert by_id["verbose-comments"]["severity"] == "block"  # extra wins over project
     assert "custom-rule" in by_id
+
+
+def test_unknown_mode_raises_at_config_load(tmp_path):
+    """A typo in modes must fail loudly. Silently never running is a silent pass."""
+    (tmp_path / "hoolint.toml").write_text(
+        '[[rule]]\nid = "r"\nglobs = ["*.py"]\nmodes = ["sesion"]\n'
+    )
+    with pytest.raises(ValueError, match="unknown mode"):
+        load_config(tmp_path)
+
+
+def test_empty_modes_list_raises_at_config_load(tmp_path):
+    """An empty list would disable the rule everywhere while looking configured."""
+    (tmp_path / "hoolint.toml").write_text(
+        '[[rule]]\nid = "r"\nglobs = ["*.py"]\nmodes = []\n'
+    )
+    with pytest.raises(ValueError, match="non-empty list"):
+        load_config(tmp_path)

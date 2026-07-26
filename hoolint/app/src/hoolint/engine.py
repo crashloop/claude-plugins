@@ -1,7 +1,7 @@
 """Run rules over files: stages sequence cheap-to-expensive per file."""
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from hoolint.config import Config
+from hoolint.config import Config, VALID_MODES
 from hoolint.findings import Finding
 from hoolint.strategies import STRATEGIES
 from hoolint.strategies.base import Context
@@ -48,9 +48,10 @@ def _guarded(rule: dict, files: list[Path], root: Path, mode: str,
 
 
 def run(cfg: Config, files: list[Path], root: Path, mode: str) -> list[Finding]:
-    """Execute all rules; rules run in parallel, stages sequentially."""
+    """Execute all rules that apply to this mode; rules run in parallel, stages sequentially."""
+    applicable = [r for r in cfg.rules if mode in r.get("modes", list(VALID_MODES))]
     # ponytail: thread pool; process pool only if CPU-bound rules dominate
     with ThreadPoolExecutor(max_workers=4) as ex:
         futures = [ex.submit(_guarded, r, files, root, mode, cfg.settings)
-                   for r in cfg.rules]
+                   for r in applicable]
         return [f for fut in futures for f in fut.result()]
