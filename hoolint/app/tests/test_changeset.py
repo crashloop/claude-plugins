@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 
 from hoolint.strategies.base import Context
 from hoolint.strategies.changeset_ import CompanionStrategy
@@ -28,6 +27,14 @@ def test_fixed_target_missing_is_flagged(tmp_path):
     assert "CHANGELOG.md" in out[0].message
     assert out[0].file == "src/api.py"      # anchored to the changed file
     assert out[0].severity == "warn"        # takes the rule's severity
+
+
+def test_companion_custom_message_replaces_the_default(tmp_path):
+    """The documented `message` key must reach the finding, not just the default."""
+    ctx = _ctx(tmp_path, "src/api.py", ["src/api.py"])
+    stage = {"requires": "CHANGELOG.md", "message": "public API changed without a CHANGELOG"}
+    out = CompanionStrategy().run(None, stage, ctx)
+    assert out[0].message == "public API changed without a CHANGELOG"
 
 
 def test_fixed_target_present_is_silent(tmp_path):
@@ -102,6 +109,14 @@ def test_change_size_over_limit_is_flagged(tmp_path):
     out = ChangeSizeStrategy().run(None, {"max_files": 2}, ctx)
     assert len(out) == 1
     assert "3" in out[0].message
+
+
+def test_change_size_custom_message_replaces_the_default(tmp_path):
+    """The documented `message` key must reach the finding, not just the default."""
+    from hoolint.strategies.changeset_ import ChangeSizeStrategy
+    ctx = _ctx(tmp_path, "a.py", ["a.py", "b.py", "c.py"])
+    stage = {"max_files": 2, "message": "too much at once"}
+    assert ChangeSizeStrategy().run(None, stage, ctx)[0].message == "too much at once"
 
 
 def test_change_size_emits_exactly_once_across_matched_files(tmp_path):

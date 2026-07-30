@@ -50,6 +50,15 @@ def test_churn_over_threshold_is_flagged(tmp_path):
     assert out[0].file == "a.py"
 
 
+def test_churn_custom_message_replaces_the_default(tmp_path):
+    """The documented `message` key must reach the finding, not just the default."""
+    repo = _repo(tmp_path)
+    _commit_n_times(repo, "a.py", 4)
+    stage = {"max_commits": 2, "message": "this file is churning"}
+    out = ChurnStrategy().run(None, stage, _ctx(repo, "a.py"))
+    assert out[0].message == "this file is churning"
+
+
 def test_churn_on_unborn_head_is_silent_not_a_crash(tmp_path):
     """A repo with no commits has no history. Zero churn is a result, not an error."""
     repo = _repo(tmp_path)
@@ -108,6 +117,18 @@ def test_commit_meta_flags_a_malformed_subject(tmp_path):
                                    _ctx(repo, "a.py"))
     assert len(out) == 1
     assert "did some stuff" in out[0].message
+
+
+def test_commit_meta_custom_message_replaces_the_default(tmp_path):
+    """The documented `message` key must reach the finding, not just the default."""
+    from hoolint.strategies.githist_ import CommitMetaStrategy
+    repo = _repo(tmp_path)
+    (repo / "a.py").write_text("x = 1\n")
+    _git(repo, "add", "a.py")
+    _git(repo, "commit", "-m", "did some stuff")
+    stage = {"subject_pattern": CONVENTION, "message": "commit subject breaks the convention"}
+    out = CommitMetaStrategy().run(None, stage, _ctx(repo, "a.py"))
+    assert out[0].message == "commit subject breaks the convention"
 
 
 def test_commit_meta_on_unborn_head_is_silent(tmp_path):
