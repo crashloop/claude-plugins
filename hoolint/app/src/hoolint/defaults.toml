@@ -59,6 +59,21 @@ severity = "warn"
 [[rule.stage]]
 strategy = "doc_links"
 
+# An em dash is the one AI writing tell worth checking mechanically. The rest of
+# the usual list (lazy extremes, adverbs) reads as slop in an essay and as
+# precision in a spec: "never stdlib `re`" is a constraint, not false authority.
+# Measured on this repo's own markdown, a word-level port would have been mostly
+# false positives. This one is context-free. Use a comma, a period, or brackets.
+[[rule]]
+id = "em-dashes"
+globs = ["**/*.md"]
+severity = "warn"
+
+[[rule.stage]]
+strategy = "prose_pattern"
+pattern = "—"
+message = "em dash: use a comma, a period, or parentheses"
+
 [[rule]]
 id = "doc-drift"
 globs = ["**/*.md"]

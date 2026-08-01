@@ -115,3 +115,87 @@ def test_prose_brackets_do_not_bury_real_broken_link(tmp_path):
     messages = {f.span_text: f.message for f in found}
     assert messages["gone.md"] == "broken relative link: gone.md"
     assert messages["guide"] == "undefined reference: [guide]"
+
+
+EM_DASH = {"id": "em-dashes", "globs": ["**/*.md"], "severity": "warn",
+           "stage": [{"strategy": "prose_pattern", "pattern": "—",
+                      "message": "em dash"}]}
+
+
+def test_em_dash_in_prose_flagged(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("The rule is simple — no em dashes.\n")
+    found = run(Config(rules=[EM_DASH], settings={}), [md], tmp_path, "git")
+    assert len(found) == 1
+    assert found[0].start_line == 1
+    assert found[0].message == "em dash"
+
+
+def test_em_dash_inside_fenced_block_not_flagged(tmp_path):
+    """Code samples are quoted, not authored prose. 22% of this repo's were fenced."""
+    md = tmp_path / "doc.md"
+    md.write_text("Prose is clean.\n\n```python\nx = 1  # a — in code\n```\n")
+    assert run(Config(rules=[EM_DASH], settings={}), [md], tmp_path, "git") == []
+
+
+def test_prose_without_em_dash_is_silent(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("Short sentences. Commas, and periods. Nothing to flag.\n")
+    assert run(Config(rules=[EM_DASH], settings={}), [md], tmp_path, "git") == []
+
+
+def test_each_offending_line_gets_its_own_fingerprint(tmp_path):
+    """Matching the bare character would give every hit one fingerprint.
+
+    Waiving a single em dash would then silence every other one in the file,
+    because the fingerprint hashes span_text.
+    """
+    md = tmp_path / "doc.md"
+    md.write_text("First line — here.\nSecond line — there.\n")
+    found = run(Config(rules=[EM_DASH], settings={}), [md], tmp_path, "git")
+    assert len(found) == 2
+    assert len({f.fingerprint for f in found}) == 2
+
+
+def test_two_em_dashes_on_one_line_are_one_finding(tmp_path):
+    md = tmp_path / "doc.md"
+    md.write_text("One — two — three.\n")
+    found = run(Config(rules=[EM_DASH], settings={}), [md], tmp_path, "git")
+    assert len(found) == 1
+    assert found[0].message == "em dash"          # not a "rule failed" finding
+    assert found[0].span_text == "One — two — three."
+
+
+def test_prose_pattern_filters_incoming_candidates(tmp_path):
+    """Chained, it filters like RegexStrategy rather than discarding the set.
+
+    Its file-mates in docs_.py generate regardless, which silently replaces the
+    previous stage's findings. New code does not copy that.
+    """
+    from hoolint.strategies.base import Context
+    from hoolint.strategies.docs_ import ProsePatternStrategy
+    from hoolint.findings import Finding
+    md = tmp_path / "doc.md"
+    md.write_text("anything\n")
+    ctx = Context(path=md, root=tmp_path, mode="git", settings={},
+                  rule_id="em-dashes", severity="warn")
+    keep = Finding(rule_id="r", file="doc.md", start_line=1, end_line=1,
+                   span_text="has — dash", message="m")
+    drop = Finding(rule_id="r", file="doc.md", start_line=2, end_line=2,
+                   span_text="clean line", message="m")
+    out = ProsePatternStrategy().run([keep, drop], {"pattern": "—"}, ctx)
+    assert out == [keep]
+
+
+def test_shipped_defaults_flag_an_em_dash(tmp_path):
+    """The rule users get, not a hand-built copy of it.
+
+    test_semantic_calibration.py used to assert against a threshold it computed
+    itself, so it never checked the shipped value. Same trap here.
+    """
+    from hoolint.config import load_config
+    md = tmp_path / "doc.md"
+    md.write_text("Plain prose with an em dash — right here.\n")
+    found = run(load_config(tmp_path), [md], tmp_path, "git")
+    assert [f.rule_id for f in found] == ["em-dashes"]
+    assert "em dash" in found[0].message

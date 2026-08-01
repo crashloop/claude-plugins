@@ -1,11 +1,16 @@
-"""Doc checks: broken relative links and stale file references.
+"""Doc checks: broken relative links, stale file references, banned prose patterns.
 
-Both strategies are generators, not filters: they scan the file's own content
-for broken references and ignore any incoming candidates.
+The two reference checks are generators, not filters: they scan the file's own
+content and ignore any incoming candidates. `ProsePatternStrategy` filters when
+given candidates. What the three share is knowing where a fenced code block is,
+so a quoted sample is never read as authored content.
 """
 import re
+
+import re2
+
 from hoolint.findings import Finding
-from hoolint.strategies.base import Context
+from hoolint.strategies.base import Context, rel_to_root
 
 # Alt 1: inline `[text](target)`. Alt 2: reference `[text][ref]` / `[text][]`.
 # The shortcut form `[ref]` (a single bracket pair, nothing after it) is not
@@ -165,3 +170,45 @@ class DocRefsStrategy:
                     out.append(_finding(ctx, i, ref,
                                         f"references missing file: {ref}"))
         return out
+
+
+class ProsePatternStrategy:
+    """Flags a configured pattern in prose, skipping fenced code blocks.
+
+    Unlike `regex`, this knows what a code fence is, so a pattern banned in
+    authored prose stays legal in a quoted code sample. Unlike its two
+    file-mates, it filters when handed candidates rather than generating over
+    them, which would silently replace the previous stage's findings.
+    """
+
+    def run(self, candidates: list[Finding] | None, stage: dict,
+            ctx: Context) -> list[Finding]:
+        """Flag every non-fenced line matching the stage's pattern.
+
+        One finding per line, not per match: the span is the whole line, so two
+        occurrences on one line read as one problem and each line keeps a
+        distinct fingerprint. Matching the bare pattern would instead give every
+        hit in the file the same fingerprint, and waiving one would silence all.
+
+        Uses re2 rather than this module's stdlib `re`, because this pattern
+        comes from project config: RE2's linear-time guarantee is what stops a
+        pathological pattern hanging the check.
+
+        Args:
+            candidates: Prior-stage findings to filter, or None to scan the file.
+            stage: Stage config: `pattern`, and an optional `message`.
+            ctx: Per-file execution context.
+
+        Returns:
+            The filtered candidates, or one finding per offending line.
+        """
+        pat = re2.compile(stage["pattern"])
+        if candidates is not None:
+            return [c for c in candidates if pat.search(c.span_text)]
+        lines = ctx.content().splitlines()
+        rel = rel_to_root(ctx.path, ctx.root)
+        message = stage.get("message", f"matched {stage['pattern']}")
+        return [Finding(rule_id=ctx.rule_id, file=rel, start_line=i, end_line=i,
+                        span_text=line, message=message, severity=ctx.severity)
+                for i, (line, fenced) in enumerate(zip(lines, _fence_mask(lines)), 1)
+                if not fenced and pat.search(line)]

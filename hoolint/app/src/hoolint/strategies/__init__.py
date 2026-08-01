@@ -1,5 +1,6 @@
 from hoolint.strategies.changeset_ import ChangeSizeStrategy, CompanionStrategy
-from hoolint.strategies.docs_ import DocLinksStrategy, DocRefsStrategy
+from hoolint.strategies.docs_ import (DocLinksStrategy, DocRefsStrategy,
+                                      ProsePatternStrategy)
 from hoolint.strategies.escalate import EscalateStrategy
 from hoolint.strategies.githist_ import ChurnStrategy, CommitMetaStrategy
 from hoolint.strategies.local_llm import LocalLLMStrategy
@@ -13,6 +14,7 @@ STRATEGIES = {
     "companion": CompanionStrategy(),
     "doc_links": DocLinksStrategy(),
     "doc_refs": DocRefsStrategy(),
+    "prose_pattern": ProsePatternStrategy(),
     "escalate": EscalateStrategy(),
     "local_llm": LocalLLMStrategy(),
     "regex": RegexStrategy(),

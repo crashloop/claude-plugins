@@ -55,10 +55,30 @@ still fails on them; `local_llm` runs whenever a local endpoint is up.
 ## Configuration
 
 `hoolint.toml` at the project root. Stock rules (`verbose-comments`,
-`doc-broken-links`, `doc-drift`) are on by default; same-id rules override
-wholesale, `enabled = false` disables. Custom Python rules in `hoolint_rules/`
-load only after `hoolint trust`, and the grant is pinned to those files'
-content — adding or editing a rule re-arms the prompt.
+`doc-broken-links`, `doc-drift`, `em-dashes`) are on by default; same-id rules
+override wholesale, `enabled = false` disables. Custom Python rules in
+`hoolint_rules/` load only after `hoolint trust`, and the grant is pinned to
+those files' content, so adding or editing a rule re-arms the prompt.
+
+`em-dashes` warns on an em dash in markdown prose, skipping fenced code blocks
+so quoted samples stay legal. It is the only writing-style rule that ships,
+because it is the only one that survives contact with technical docs: a ban on
+absolutes or adverbs flags "never stdlib `re`", which is a constraint rather
+than a stylistic tic. Disable it with `enabled = false` if you write em dashes
+on purpose. To ban en dashes and ellipses too, override the pattern:
+
+```toml
+[[rule]]
+id = "em-dashes"
+globs = ["**/*.md"]
+severity = "warn"
+[[rule.stage]]
+strategy = "prose_pattern"
+pattern = "[—–…]"
+```
+
+Only fenced blocks are skipped, not inline code spans, so a doc that discusses
+the character itself (this one) reports it. Waive those.
 
 `local_llm.base_url` is restricted to loopback and private addresses, so a
 project's config cannot ship your code to a public host.
