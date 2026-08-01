@@ -184,9 +184,24 @@ def _cmd_waive(args: argparse.Namespace) -> int:
 
 
 def _cmd_warmup(args: argparse.Namespace) -> int:
-    from hoolint.strategies.semantic import download_model
-    download_model()
-    print("hoolint: warm")
+    """Download the model the check will actually load.
+
+    Resolves `settings.semantic_model` exactly as SemanticStrategy does. Warming
+    a different model would still write the ready marker, so the semantic stage
+    would skip its "warming up" path and then fail offline on every run, with no
+    amount of re-running warmup able to fix it.
+
+    Args:
+        args: Parsed CLI namespace for the `warmup` subcommand.
+
+    Returns:
+        0 once the model is cached and the ready marker is written.
+    """
+    from hoolint.strategies import semantic
+    root = Path(args.root).resolve()
+    model = load_config(root).settings.get("semantic_model", semantic.DEFAULT_MODEL)
+    semantic.download_model(model)
+    print(f"hoolint: warm ({model})")
     return 0
 
 
@@ -235,6 +250,7 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--root", default=".")
     w.set_defaults(fn=_cmd_waive)
     wu = sub.add_parser("warmup")
+    wu.add_argument("--root", default=".")
     wu.set_defaults(fn=_cmd_warmup)
     t = sub.add_parser("trust")
     t.add_argument("--root", default=".")

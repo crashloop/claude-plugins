@@ -333,3 +333,20 @@ def test_waive_prune_keeps_waivers_for_session_only_rules(tmp_path, capsys):
     assert code == 0
     assert "pruned 0" in capsys.readouterr().out
     assert fp in (tmp_path / "hoolint-waivers.toml").read_text()
+
+
+def test_warmup_downloads_the_configured_model(tmp_path, monkeypatch, capsys):
+    """Warmup must honour settings.semantic_model, the same key the check reads.
+
+    Warming the default while the check loads a different model writes a ready
+    marker that lies: the semantic stage then fails offline and no amount of
+    re-running warmup can fix it.
+    """
+    (tmp_path / "hoolint.toml").write_text(
+        '[settings]\nsemantic_model = "minishlab/potion-base-32M"\n')
+    asked = []
+    monkeypatch.setattr("hoolint.strategies.semantic.download_model",
+                        lambda name: asked.append(name))
+
+    assert cli.main(["warmup", "--root", str(tmp_path)]) == 0
+    assert asked == ["minishlab/potion-base-32M"]
