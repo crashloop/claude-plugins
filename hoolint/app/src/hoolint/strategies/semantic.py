@@ -77,7 +77,7 @@ class SemanticStrategy:
             return candidates
         enc = self._get_encoder(
             ctx.settings.get("semantic_model", DEFAULT_MODEL))
-        threshold = stage.get("threshold", 0.6)
+        threshold = stage.get("threshold", 0.3)   # calibrated; see defaults.toml
         kept = []
         for c in candidates:
             code = _adjacent_code(ctx.content(), c.start_line, c.end_line)

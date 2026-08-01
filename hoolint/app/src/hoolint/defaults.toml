@@ -21,9 +21,14 @@ message = "more than 2 consecutive comment lines"
 [[rule.stage]]
 strategy = "semantic"
 op = "and"
-# Set from tests/test_semantic_calibration.py; record the measured
-# false-positive rate here when you change it.
-threshold = 0.6
+# Set from tests/test_semantic_calibration.py; re-run it (`pytest -m slow`) and
+# record the measured rates here when you change this or the model.
+# Measured on potion-base-8M, 20 labelled pairs: recall 1.00, fp 0.40.
+# This gates the judge, so a miss is permanent while a false positive is merely
+# judged and dropped downstream. Hence recall first. The labelled useful scores
+# are bimodal (six <=0.244, four at 0.525-0.632 no usable threshold excludes),
+# so 0.30 is the max-margin point in the gap below the lowest redundant, 0.361.
+threshold = 0.30
 
 [[rule.stage]]
 strategy = "local_llm"
