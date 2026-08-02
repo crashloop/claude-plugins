@@ -109,3 +109,25 @@ async def test_dead_spare_behind_a_live_one_does_not_keep_a_slot(pool):
     assert corpse not in pool
     assert corpse.killed is True
     assert pool == []
+
+
+@pytest.mark.asyncio
+async def test_concurrent_takes_get_distinct_processes(pool):
+    await openai_route._warm(*HAIKU_FAST)
+
+    results = await asyncio.gather(
+        *(openai_route._take(*HAIKU_FAST) for _ in range(4)))
+
+    judges = [j for j, _ in results]
+    assert len({id(j) for j in judges}) == 4, "a process was handed to two requests"
+    assert [w for _, w in results].count(True) == 1, "only one spare was parked"
+
+
+@pytest.mark.asyncio
+async def test_boot_does_not_happen_under_the_pool_lock(pool):
+    """FakeJudge.start asserts the lock is free. Without that, the test above
+    would still pass while every boot serialized behind the first."""
+    judge, warm = await openai_route._take(*SONNET_SLOW)
+
+    assert warm is False
+    assert judge.started is True
