@@ -53,3 +53,24 @@ def test_empty_modes_list_raises_at_config_load(tmp_path):
     )
     with pytest.raises(ValueError, match="non-empty list"):
         load_config(tmp_path)
+
+
+def test_readme_rule_examples_stay_runnable():
+    """Every documented rule must parse and name a registered strategy.
+
+    The README carries opt-in rules as copy-paste TOML. Nothing else executes
+    them, so a renamed strategy would leave working prose that silently fails on
+    the first user who pastes it.
+    """
+    import re
+    import tomllib
+    from hoolint.strategies import STRATEGIES
+    readme = (Path(__file__).parents[2] / "README.md").read_text()
+    documented = [r for block in re.findall(r"```toml\n(.*?)```", readme, re.S)
+                  for r in tomllib.loads(block).get("rule", [])]
+    assert documented, "no rule examples found: the extraction pattern broke"
+    for rule in documented:
+        assert rule["globs"], f"{rule['id']}: no globs"
+        for stage in rule.get("stage", []):
+            assert stage["strategy"] in STRATEGIES, \
+                f"{rule['id']}: unknown strategy {stage['strategy']!r}"

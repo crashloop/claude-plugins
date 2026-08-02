@@ -4,6 +4,8 @@ from hoolint.strategies.docs_ import (DocLinksStrategy, DocRefsStrategy,
 from hoolint.strategies.escalate import EscalateStrategy
 from hoolint.strategies.githist_ import ChurnStrategy, CommitMetaStrategy
 from hoolint.strategies.local_llm import LocalLLMStrategy
+from hoolint.strategies.pyast_ import (MockEchoAssertStrategy,
+                                       PermissiveRecoveryStrategy)
 from hoolint.strategies.regex_ import RegexStrategy
 from hoolint.strategies.semantic import SemanticStrategy
 
@@ -17,6 +19,8 @@ STRATEGIES = {
     "prose_pattern": ProsePatternStrategy(),
     "escalate": EscalateStrategy(),
     "local_llm": LocalLLMStrategy(),
+    "mock_echo_assert": MockEchoAssertStrategy(),
+    "permissive_recovery": PermissiveRecoveryStrategy(),
     "regex": RegexStrategy(),
     "semantic": SemanticStrategy(),
 }

@@ -111,6 +111,85 @@ pattern = "—"
 `local_llm.base_url` is restricted to loopback and private addresses, so a
 project's config cannot ship your code to a public host.
 
+## Python AST rules
+
+These shortlist defects that no pattern can find, because the defect is a statement's
+position inside a function rather than its shape. Neither ships enabled: each is a
+candidate generator meant to be followed by a `local_llm` or `escalate` stage, never a
+verdict on its own. Without a local model reachable, `local_llm` notes that it skipped
+and every candidate ships as a `warn`, so turning these on without one gives you the raw
+shortlist rather than a verdict.
+
+`mock_echo_assert` flags `assert x == v` where a mock in the *same function* was told to
+return `v`. Such an assertion cannot fail unless the code under test stops returning at
+all, since it checks the value the test itself installed.
+
+Three filters keep the shortlist honest, each one measured rather than guessed. Mock setups
+are collected per function, never module-wide. Valueless literals (`None`, `True`, `[]`,
+`0`, `""`) never match, because they collide by coincidence rather than by dataflow. And the
+left side must be a bare name: a subscript, attribute or call there means the value
+travelled through real code and the assert pins where it landed, which is a wiring check
+worth keeping (`assert response.json() == articles`, `assert log.database_size_bytes ==
+1024000`). Hand-classifying every finding on two repositories, those three cuts took 88
+candidates down to 12, and 10 of the 12 survivors were genuine. The remaining pair is why
+the judge stage is still there.
+
+```toml
+[[rule]]
+id = "mock-echo-assert"
+globs = ["**/test_*.py", "**/tests/**/*.py"]
+severity = "warn"
+[[rule.stage]]
+strategy = "mock_echo_assert"
+[[rule.stage]]
+strategy = "local_llm"
+op = "and"
+model = "qwen3:4b"
+max_candidates = 10
+prompt = """Judge each numbered assertion. Reply `[N] VIOLATION: <reason>` or
+`[N] OK: <reason>`. VIOLATION if the assertion only restates a value the test
+itself configured, so deleting the code under test would not fail it. OK if it
+pins a pass-through that a future refactor could silently break, or if the
+surrounding call assertions carry the real verification.
+
+Assertions:
+{span}"""
+```
+
+`permissive_recovery` flags an `except` handler that recovers with `return True`,
+`return None`, or `pass` inside a function whose name matches `name_contains`. Fail-open
+and fail-closed recovery are the same three tokens of Python, so only the function's role
+separates them, and that role is per project vocabulary rather than something to guess.
+With the `exclude_globs` below, it produced 4 candidates over 3,724 files, which is the
+shortlist size a judge stage wants.
+
+`return None` is offered deliberately even though it is often right. In a cascade of
+permission checks it means "no opinion, ask the next tier"; in a lone check it means
+"allowed by default"; and in a DRF `authenticate()` it is the documented way to pass to the
+next authenticator. Use `exclude_globs` to keep test helpers out of the shortlist.
+
+```toml
+[[rule]]
+id = "auth-fails-open"
+globs = ["**/*.py"]
+exclude_globs = ["**/tests/**", "**/test_*.py"]
+severity = "warn"
+[[rule.stage]]
+strategy = "permissive_recovery"
+name_contains = ["permission", "authorize", "authenticate", "has_perm", "can_"]
+[[rule.stage]]
+strategy = "escalate"
+prompt = """Does this handler let an unauthorized caller through, or is the
+permissive result correct here? `return None` is right when the caller treats it
+as "no opinion" and consults another check, and wrong when the caller reads it as
+allowed. Follow the call site before deciding. Waive only with the user's
+explicit sanction."""
+```
+
+Both refuse to run in second position: they generate rather than filter, so chaining one
+after another stage would discard what that stage found. Put them first, or use
+`op = "or"`.
+
 ## Metadata rules
 
 These check the change set and repository history rather than the contents of one file. None is
