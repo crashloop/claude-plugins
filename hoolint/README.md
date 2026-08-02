@@ -80,6 +80,23 @@ pattern = "[—–…]"
 Only fenced blocks are skipped, not inline code spans, so a doc that discusses
 the character itself (this one) reports it. Waive those.
 
+`exclude_globs` narrows any rule's file scope after `globs` has widened it. Use
+it for text nobody in the repository wrote: vendored library dumps, generated
+API references, skill files that quote bad prose as examples. Without it, a
+single 6000-line vendored doc costs one waiver per finding. Overrides are
+wholesale, so repeat the stages you want to keep:
+
+```toml
+[[rule]]
+id = "em-dashes"
+globs = ["**/*.md"]
+exclude_globs = [".github/backend/**", "docs/generated/**"]
+severity = "warn"
+[[rule.stage]]
+strategy = "prose_pattern"
+pattern = "—"
+```
+
 `local_llm.base_url` is restricted to loopback and private addresses, so a
 project's config cannot ship your code to a public host.
 

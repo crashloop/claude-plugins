@@ -61,6 +61,36 @@ def test_malformed_rule_missing_id_does_not_crash_guard(tmp_path):
     assert "KeyError" in found[0].message
 
 
+EXCLUDED_RULE = {**RULE, "exclude_globs": ["vendor/**", "**/*.generated.py"]}
+
+
+def test_exclude_globs_drops_a_file_the_globs_admitted(tmp_path):
+    """Vendored text matches `**/*.py` and must still never be linted."""
+    (tmp_path / "vendor").mkdir()
+    vendored = tmp_path / "vendor" / "dep.py"
+    vendored.write_text("# one\n# two\n# three\ny = 2\n")
+    cfg = Config(rules=[EXCLUDED_RULE], settings={})
+    assert run(cfg, [vendored], tmp_path, "session") == []
+
+
+def test_exclude_globs_spares_files_it_does_not_match(tmp_path):
+    """The exclusion is surgical: a sibling outside the excluded paths still reports."""
+    own = tmp_path / "m.py"
+    own.write_text("# one\n# two\n# three\ny = 2\n")
+    cfg = Config(rules=[EXCLUDED_RULE], settings={})
+    found = run(cfg, [own], tmp_path, "session")
+    assert [f.file for f in found] == ["m.py"]
+
+
+def test_absent_exclude_globs_changes_nothing(tmp_path):
+    """A rule without the key behaves exactly as before it existed."""
+    vendored_path = tmp_path / "vendor"
+    vendored_path.mkdir()
+    f = vendored_path / "dep.py"
+    f.write_text("# one\n# two\n# three\ny = 2\n")
+    assert len(run(Config(rules=[RULE], settings={}), [f], tmp_path, "session")) == 1
+
+
 TRAILING_BLANK_RULE = {
     "id": "trailing-blank", "globs": ["**/*.py"], "severity": "warn",
     "stage": [{"strategy": "regex", "pattern": r"x\n\n\n", "message": "trailing blanks"}],

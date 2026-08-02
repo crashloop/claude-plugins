@@ -7,13 +7,29 @@ from hoolint.strategies import STRATEGIES
 from hoolint.strategies.base import Context
 
 
+def _admits(rule: dict, path: Path, root_r: Path) -> bool:
+    """Whether a rule's file scope covers this path.
+
+    Args:
+        rule: The rule, for its `globs` and optional `exclude_globs`.
+        path: A changed file, resolved or not.
+        root_r: The already-resolved project root.
+
+    Returns:
+        True if the path is inside the root, matches a glob, and matches no exclusion.
+    """
+    resolved = path.resolve()
+    if not resolved.is_relative_to(root_r):
+        return False
+    rel = resolved.relative_to(root_r)
+    return (any(rel.full_match(g) for g in rule["globs"])
+            and not any(rel.full_match(g) for g in rule.get("exclude_globs", [])))
+
+
 def _run_rule(rule: dict, files: list[Path], root: Path, mode: str,
               settings: dict) -> list[Finding]:
     root_r = root.resolve()
-    matched = [f for f in files
-               if (f_r := f.resolve()).is_relative_to(root_r)
-               and any(f_r.relative_to(root_r).full_match(g)
-                       for g in rule["globs"])]
+    matched = [f for f in files if _admits(rule, f, root_r)]
     out: list[Finding] = []
     for path in matched:
         ctx = Context(path=path, root=root, mode=mode, settings=settings,
