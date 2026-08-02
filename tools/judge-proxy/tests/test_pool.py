@@ -51,3 +51,33 @@ async def test_shutdown_kills_every_parked_spare(pool):
 
     assert pool == []
     assert all(j.killed for j in parked)
+
+
+@pytest.mark.asyncio
+async def test_pool_never_exceeds_the_cap_and_evicts_oldest(pool, monkeypatch):
+    monkeypatch.setattr(openai_route, "SPARES", 2)
+
+    await openai_route._warm(*HAIKU_FAST)
+    oldest = pool[0]
+    await openai_route._warm(*SONNET_SLOW)
+    await openai_route._warm(*HAIKU_FAST)
+
+    assert len(pool) == 2
+    assert oldest not in pool
+    assert oldest.killed is True, "an evicted spare must be killed, not dropped"
+
+
+@pytest.mark.asyncio
+async def test_spares_zero_parks_nothing_and_does_not_raise(pool, monkeypatch):
+    """The documented escape hatch. An unguarded cap check pops an empty list."""
+    monkeypatch.setattr(openai_route, "SPARES", 0)
+
+    await openai_route._warm(*HAIKU_FAST)
+
+    assert pool == []
+
+
+def test_negative_spares_clamps_to_zero(monkeypatch):
+    """A negative pool size has an obvious intent (none) and no useful error."""
+    monkeypatch.setenv("JUDGE_PROXY_SPARES", "-1")
+    assert max(0, int(os.environ["JUDGE_PROXY_SPARES"])) == 0
