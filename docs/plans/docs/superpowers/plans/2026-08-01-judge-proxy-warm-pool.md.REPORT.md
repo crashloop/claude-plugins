@@ -1,7 +1,8 @@
 # judge-proxy warm pool: implementation report
 
 Plan: `docs/superpowers/plans/2026-08-01-judge-proxy-warm-pool.md`
-Base: `7947214`. Head after this work: `759804a`. All 7 tasks complete.
+Base: `7947214`. Head after this work: `f41547e`. All 7 tasks complete, plus a
+review pass recorded at the end.
 
 ## Execution note
 
@@ -76,8 +77,61 @@ README's before column reports.
 - Two pre-existing README lines exceed 100 characters (table rows in `Where the
   seconds went`). They were left alone as pre-existing.
 
-## Remaining issues
+## Post-implementation review, and the fixes it forced
 
-None. Pyright reports unresolved `fastapi` and `openai_route` imports and
-`Optional` member access inside `_Judge`; all are pre-existing and stem from
-pyright not using the project's `.venv`, not from this change.
+A review pass after Task 7 found three holes the plan left. Fixed in `f41547e`;
+the suite is now 16 tests.
+
+**Shutdown leaked CLI processes.** `_shutdown` drained `_pool` but ignored
+`_warming`. A prewarm in flight at that moment booted its process and parked it
+afterwards, into a pool nobody empties again. Under the old single slot this
+leaked one process; with `MAX_INFLIGHT=8` each served request starts a warm, so
+up to 8 CLIs at ~277MB could outlive uvicorn. Task 1 Step 8's orphan check
+missed it because the warm had already finished by the time it ran. `_shutdown`
+is now `async` and awaits `_warming` before draining, which required changing
+`test_shutdown_kills_every_parked_spare` to await it.
+
+**Two tests could not fail.** Verified by mutation: with `max(0, ...)` deleted
+*and* `async with _inflight:` replaced by `if True:`, the suite stayed 13/13
+green.
+
+- `test_negative_spares_clamps_to_zero` reimplemented `max(0, int(...))` in its
+  own body and never touched the module. The clamp is now a `_cap` helper used
+  by both settings, and the test calls it. A second test pins the
+  `MAX_INFLIGHT` floor of 1, which a zero would turn into a deadlock.
+- `test_inflight_cap_sits_above_hoolints_own_ceiling` asserted the semaphore's
+  initial value only, so Task 5's actual behavior had no coverage.
+  `test_requests_over_the_inflight_cap_do_not_overlap` now drives three
+  concurrent requests against a cap of 1 and asserts they never overlap.
+
+All three fixes were mutation-checked: reverting each one turns its test red.
+
+**The acceptance ratio's denominator was unverified.** `bench_pool.py` discarded
+the baseline's `warm` flag. A cold baseline includes a boot, inflates the
+denominator, and lets `median / baseline` pass while proving nothing. The probe
+now exits rather than scoring against a cold baseline.
+
+The pattern is visible in the plan itself. Every test with a genuine behavioral
+red phase (reuse, thrash, dead-spare sweep, concurrency) bites. The two whose
+red was either "expected to pass immediately" (Task 2) or a bare `AttributeError`
+(Task 5) were exactly the two that did not.
+
+A live check confirmed the shutdown fix: SIGINT sent while a replacement spare
+was booting, `Application shutdown complete` in the log, and no `stream-json`
+process left behind.
+
+## Known and accepted
+
+- `MAX_INFLIGHT` bounds requests being served, not total processes. Replacement
+  spares boot outside the semaphore, so the real ceiling is about
+  `2 * MAX_INFLIGHT + SPARES`, roughly 20 at defaults. The README now says so
+  rather than implying 8.
+- `_warm` evicts strictly oldest-first without preferring dead entries, so a
+  corpse can outlive a live spare until the next `_take` sweeps it. One wasted
+  slot for one request; not worth the branch.
+- Pyright reports unresolved `fastapi` and `openai_route` imports and `Optional`
+  member access inside `_Judge`. All pre-existing, and they stem from pyright
+  not using the project's `.venv`.
+- Two README lines exceed 100 characters and `app.py` contains an em dash. Both
+  pre-existing, and `app.py` is inherited from `llm-faker` and must not be
+  edited.
