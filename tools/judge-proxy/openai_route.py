@@ -130,6 +130,10 @@ class _Judge:
 # A pool, not one spare: several rules judge at once and their (model, thinking)
 # keys differ, so one slot would be killed and rebooted on every other request.
 SPARES = max(0, int(os.environ.get("JUDGE_PROXY_SPARES", "4")))
+# SPARES bounds idle memory; this bounds peak. Requests over the limit queue
+# rather than fail, so no new error path reaches hoolint.
+MAX_INFLIGHT = max(1, int(os.environ.get("JUDGE_PROXY_MAX_INFLIGHT", "8")))
+_inflight = asyncio.Semaphore(MAX_INFLIGHT)
 _pool: list[_Judge] = []        # oldest boot first
 _lock = asyncio.Lock()
 # asyncio keeps only a weak reference to a running task, so a fire-and-forget
@@ -252,30 +256,32 @@ async def chat_completions(request: Request):
     no_thinking = str(body.get("reasoning_effort", "")).lower() in _NO_THINKING
 
     started = time.monotonic()
-    try:
-        judge, warm = await _take(model, no_thinking)
-    except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
-        return JSONResponse(status_code=502, content={
-            "error": {"type": "api_error", "message": f"claude failed to start: {exc}"}})
+    async with _inflight:
+        try:
+            judge, warm = await _take(model, no_thinking)
+        except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
+            return JSONResponse(status_code=502, content={
+                "error": {"type": "api_error",
+                          "message": f"claude failed to start: {exc}"}})
 
-    try:
-        out = await asyncio.wait_for(
-            judge.ask(_prompt_from(messages)), timeout=TIMEOUT_S)
-    except (asyncio.TimeoutError, RuntimeError) as exc:
-        # 502 rather than a 200 with empty content: hoolint treats an HTTP error
-        # as "judge unavailable" and demotes the rule to advisory, whereas an
-        # empty 200 would read as "every candidate cleared".
-        detail = f"timed out after {TIMEOUT_S}s" if isinstance(
-            exc, asyncio.TimeoutError) else str(exc)[:300]
-        return JSONResponse(status_code=502, content={
-            "error": {"type": "api_error", "message": f"claude -p failed: {detail}"}})
-    finally:
-        # One prompt per process: a reused session would carry the previous
-        # file's verdicts into the next judgment and grow the prompt each call.
-        judge.kill()
-        task = asyncio.create_task(_warm(model, no_thinking))
-        _warming.add(task)
-        task.add_done_callback(_warming.discard)
+        try:
+            out = await asyncio.wait_for(
+                judge.ask(_prompt_from(messages)), timeout=TIMEOUT_S)
+        except (asyncio.TimeoutError, RuntimeError) as exc:
+            # 502 rather than a 200 with empty content: hoolint treats an HTTP
+            # error as "judge unavailable" and demotes the rule to advisory,
+            # whereas an empty 200 would read as "every candidate cleared".
+            detail = f"timed out after {TIMEOUT_S}s" if isinstance(
+                exc, asyncio.TimeoutError) else str(exc)[:300]
+            return JSONResponse(status_code=502, content={
+                "error": {"type": "api_error", "message": f"claude -p failed: {detail}"}})
+        finally:
+            # One prompt per process: a reused session would carry the previous
+            # file's verdicts into the next judgment and grow the prompt each call.
+            judge.kill()
+            task = asyncio.create_task(_warm(model, no_thinking))
+            _warming.add(task)
+            task.add_done_callback(_warming.discard)
 
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",

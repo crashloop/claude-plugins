@@ -131,3 +131,11 @@ async def test_boot_does_not_happen_under_the_pool_lock(pool):
 
     assert warm is False
     assert judge.started is True
+
+
+def test_inflight_cap_sits_above_hoolints_own_ceiling():
+    """hoolint runs rules in a 4-thread pool, so the backstop must never engage
+    for the real caller. It exists because the proxy is an HTTP server on a port
+    and should not depend on its caller for a memory bound."""
+    assert openai_route.MAX_INFLIGHT >= 4
+    assert openai_route._inflight._value == openai_route.MAX_INFLIGHT
