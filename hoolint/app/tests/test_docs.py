@@ -187,6 +187,38 @@ def test_prose_pattern_filters_incoming_candidates(tmp_path):
     assert out == [keep]
 
 
+def test_shipped_defaults_flag_leverage_and_utilize(tmp_path):
+    """Both stems, and their inflections, in one line each."""
+    from hoolint.config import load_config
+    md = tmp_path / "doc.md"
+    md.write_text("Leverage the cache here.\nThe view utilizes a serializer.\n"
+                  "It leveraged nothing and we are utilizing none of it.\n")
+    found = run(load_config(tmp_path), [md], tmp_path, "git")
+    assert {f.start_line for f in found} == {1, 2, 3}
+    assert {f.rule_id for f in found} == {"use-not-leverage"}
+    assert found[0].message == "say 'use'"
+
+
+def test_utilization_is_not_flagged(tmp_path):
+    """`utilization` is domain vocabulary, and appears inside test ids.
+
+    Measured over 1.29M prose lines it was the single largest form (248 hits) and
+    every sampled one was legitimate: "connection pool utilization", "Budget
+    Utilization" cards, `data-testid="export-utilization-button"`.
+    """
+    from hoolint.config import load_config
+    md = tmp_path / "doc.md"
+    md.write_text("Connection pool utilization should stay below 80%.\n")
+    assert run(load_config(tmp_path), [md], tmp_path, "git") == []
+
+
+def test_leverage_inside_a_fence_is_not_flagged(tmp_path):
+    from hoolint.config import load_config
+    md = tmp_path / "doc.md"
+    md.write_text("Fine prose.\n\n```python\nleverage = compute_leverage()\n```\n")
+    assert run(load_config(tmp_path), [md], tmp_path, "git") == []
+
+
 def test_shipped_defaults_flag_an_em_dash(tmp_path):
     """The rule users get, not a hand-built copy of it.
 

@@ -74,6 +74,23 @@ strategy = "prose_pattern"
 pattern = "—"
 message = "em dash: use a comma, a period, or parentheses"
 
+# The only anti-slop word list that survived measurement: 487 hits over 1.29M
+# prose lines across four repos, ~86% true positive. The famous phrases ("delve
+# into", "in today's fast-paced world", "furthermore") scored exactly zero on
+# that corpus, and the hedging and meta-commentary lists were 100% false
+# positives: "may or may not be synced" is precision, "## What's in This
+# Section" is a heading. `utilization` is deliberately not matched. It is domain
+# vocabulary ("connection pool utilization") and appears inside test ids.
+[[rule]]
+id = "use-not-leverage"
+globs = ["**/*.md"]
+severity = "warn"
+
+[[rule.stage]]
+strategy = "prose_pattern"
+pattern = "(?i)\\b(leverag(e|es|ed|ing)|utiliz(e|es|ed|ing))\\b"
+message = "say 'use'"
+
 [[rule]]
 id = "doc-drift"
 globs = ["**/*.md"]

@@ -80,6 +80,17 @@ pattern = "[—–…]"
 Only fenced blocks are skipped, not inline code spans, so a doc that discusses
 the character itself (this one) reports it. Waive those.
 
+`use-not-leverage` warns on `leverage` and `utilize` in markdown, in every
+inflected form except `utilization`. It is the one word list out of the usual
+anti-slop catalogue that earned its place. Measured over 1.29M lines of prose in
+four repositories it produced 487 findings at roughly 86% true positive, while
+"delve into", "in today's fast-paced world" and "furthermore" produced exactly
+zero, and the hedging and meta-commentary lists produced nothing but false
+positives: "may or may not be synced" is precision, and "What's in This Section"
+is a heading. `utilization` is spared because it is domain vocabulary
+("connection pool utilization") and appears inside test ids. As with
+`em-dashes`, this paragraph trips its own rule. Waive it.
+
 `exclude_globs` narrows any rule's file scope after `globs` has widened it. Use
 it for text nobody in the repository wrote: vendored library dumps, generated
 API references, skill files that quote bad prose as examples. Without it, a
