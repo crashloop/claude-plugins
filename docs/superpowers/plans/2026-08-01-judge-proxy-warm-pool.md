@@ -10,22 +10,22 @@
 
 ## Starting state (read this first)
 
-This plan edits code that is **uncommitted working-tree state** as of 2026-08-01.
-`git log` will not show it. Before Task 1, confirm `tools/judge-proxy/openai_route.py`
-contains all of:
+This plan builds on `29f5c08`, "perf(judge-proxy): warm the CLI, drop the chrome,
+honour reasoning_effort". Start from that commit or later. Before Task 1, confirm
+`tools/judge-proxy/openai_route.py` contains all of:
 
 - a `_Judge` class with `key`, `async start()`, `async ask()`, `alive()`, `kill()`
 - a module-level `_spare: _Judge | None` and `_lock`
 - `_warm`, `_take`, `_startup`, `_shutdown`, and `router.add_event_handler` calls
 - `BASE_ARGS` containing `--input-format stream-json`
 
-If instead you find a `_run_claude` function and no `_Judge` class, you are on the
-committed version (`d7f0548`) and the prerequisite work is missing. Stop and say so.
-Every line reference in this plan is against the working-tree version.
+If instead you find a `_run_claude` function and no `_Judge` class, you are on
+`d7f0548` or earlier and the prerequisite work is missing. Stop and say so.
 
-The same applies to hoolint: `strategies/local_llm.py` must already forward
-`reasoning_effort`, and `defaults.toml` must already set it on `verbose-comments`.
-Those are not touched by this plan but the acceptance measurement depends on them.
+The same applies to hoolint, from `ff08635`: `strategies/local_llm.py` must already
+forward `reasoning_effort`, and `defaults.toml` must already set it on
+`verbose-comments`. Neither is touched by this plan, but the acceptance
+measurement sends `reasoning_effort` and would otherwise measure a thinking judge.
 
 ## Global Constraints
 
