@@ -111,12 +111,16 @@ class LocalLLMStrategy:
             ctx.skip_filter(f"local_llm refused non-local endpoint: {base}")
             return candidates
 
+        # Over the cap, judge the first N rather than nothing: skipping the
+        # whole file gave the noisiest files the least scrutiny.
         cap = stage.get("max_candidates", 10)
-        if len(candidates) > cap:
+        candidates, overflow = candidates[:cap], candidates[cap:]
+        if overflow:
             ctx.skip_filter(
-                f"local_llm skipped (budget exhausted: {len(candidates)} "
-                f"candidates > max {cap})")
-            return candidates
+                f"local_llm judged the first {cap}, {len(overflow)} candidates "
+                f"over the cap pass unjudged")
+        if not candidates:
+            return overflow
 
         # One request per file, not per candidate: wall time stays bounded.
         numbered = "\n\n".join(
@@ -147,25 +151,25 @@ class LocalLLMStrategy:
                 ctx.skip_filter(
                     f"local_llm skipped (HTTP {exc.response.status_code} "
                     f"from {base}: {body})")
-                return candidates
+                return candidates + overflow
             except httpx.HTTPError:
                 ctx.skip_filter(f"local_llm skipped (endpoint unreachable: {base})")
-                return candidates
+                return candidates + overflow
 
             try:
                 reply = r.json()["choices"][0]["message"]["content"]
             except (KeyError, IndexError, ValueError) as exc:
                 ctx.skip_filter(
                     f"local_llm skipped (malformed reply from {base}: {exc})")
-                return candidates
+                return candidates + overflow
 
             if not isinstance(reply, str):
                 ctx.skip_filter(
                     f"local_llm skipped (malformed reply from {base}: "
                     f"content was {type(reply).__name__}, not a string)")
-                return candidates
+                return candidates + overflow
 
-        return self._apply_verdicts(reply, candidates)
+        return self._apply_verdicts(reply, candidates) + overflow
 
     def _apply_verdicts(self, reply: str, candidates: list[Finding]) -> list[Finding]:
         """Keep only candidates whose verdict line clearly starts with VIOLATION.

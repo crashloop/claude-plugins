@@ -14,9 +14,10 @@ def _ctx(tmp_path):
                    rule_id="verbose-comments", severity="block")
 
 
-def _cand():
-    return Finding(rule_id="verbose-comments", file="m.py", start_line=1,
-                   end_line=3, span_text="# a\n# b\n# c\n", message="verbose")
+def _cand(line: int = 1):
+    return Finding(rule_id="verbose-comments", file="m.py", start_line=line,
+                   end_line=line + 2, span_text=f"# VERBOSE {line}\n",
+                   message="verbose")
 
 
 def _transport(reply, calls=None):
@@ -107,12 +108,44 @@ def test_reasoning_effort_omitted_when_the_rule_does_not_set_it(tmp_path):
     assert "reasoning_effort" not in calls[0]
 
 
-def test_candidate_cap_skips_rather_than_hanging(tmp_path):
+def test_candidate_cap_judges_the_first_n_and_passes_the_rest(tmp_path):
+    """Over the cap, judging none was strictly worse than judging some.
+
+    Measured on one 914-file repository, skipping whole files sent 34% of all
+    candidates to the user unjudged, and they came from the noisiest files.
+    """
+    ctx = _ctx(tmp_path)
+    calls = []
+    cands = [_cand(line=i) for i in range(12)]
+    strat = LocalLLMStrategy(
+        transport=_transport("[0] VIOLATION: x\n[3] VIOLATION: y", calls))
+
+    kept = strat.run(cands, {**STAGE, "max_candidates": 10}, ctx)
+
+    assert calls[0]["messages"][0]["content"].count("VERBOSE") == 10, \
+        "exactly the first 10 candidates were sent"
+    assert kept == [cands[0], cands[3], cands[10], cands[11]], \
+        "confirmed from the judged batch, plus the unjudged overflow"
+    assert any("2 candidates over the cap" in n for n in ctx.notes)
+
+
+def test_candidate_cap_still_disarms_blocking(tmp_path):
+    """The overflow was never vetted, so the file has not earned a block."""
     ctx = _ctx(tmp_path)
     strat = LocalLLMStrategy(transport=_transport("[0] VIOLATION: x"))
-    cands = [_cand() for _ in range(11)]
-    assert strat.run(cands, {**STAGE, "max_candidates": 10}, ctx) == cands
-    assert any("budget exhausted" in n for n in ctx.notes)
+    strat.run([_cand(line=i) for i in range(11)],
+              {**STAGE, "max_candidates": 10}, ctx)
+    assert ctx.filter_skipped is True
+
+
+def test_a_zero_cap_judges_nothing_and_passes_everything(tmp_path):
+    """A cap below one has no batch to send; it must not post an empty prompt."""
+    ctx = _ctx(tmp_path)
+    calls = []
+    strat = LocalLLMStrategy(transport=_transport("[0] VIOLATION: x", calls))
+    cands = [_cand(line=i) for i in range(3)]
+    assert strat.run(cands, {**STAGE, "max_candidates": 0}, ctx) == cands
+    assert calls == []
 
 
 def test_malformed_reply_drops_unclear_candidates_without_crashing(tmp_path):

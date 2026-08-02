@@ -24,16 +24,18 @@ so the corpus has no positives and this measures specificity, not precision.
 
 **structurella (914 tracked Python files, comments written to no such standard).**
 
-| stage | candidates |
-| --- | --- |
-| after regex and semantic | 170 |
-| in files over `max_candidates`, judge never ran | 58 (4 files) |
-| actually judged | 112 |
-| confirmed VIOLATION | 59 |
-| cleared OK | 53 |
-| reported to the user | 117 |
+| stage | before the cap fix | after |
+| --- | --- | --- |
+| after regex and semantic | 170 | 170 |
+| unjudged, over `max_candidates` | 58 (4 whole files) | 18 (the overflow only) |
+| actually judged | 112 | 152 |
+| confirmed VIOLATION | 59 | 70 |
+| cleared OK | 53 | 82 |
+| reported to the user | 117 | 88 |
 
-The judged run cost 3m18s for 67 files, every request served from a warm spare.
+The judged run cost 3m18s for 67 files before the fix and 3m38s after, every
+request served from a warm spare. The "before" column is what prompted the fix
+described below; the sampling that follows was done against it.
 
 ## Ground truth on a sample
 
@@ -58,12 +60,18 @@ go" rather than as a calibrated rate.
 
 ## Two findings worth acting on
 
-**The budget cap inverts on the files that need it most.** `max_candidates = 10`
-is per file, and a file over the cap skips the judge entirely rather than
-judging the first ten. On structurella that sent 58 of 170 candidates (34%) to
-the user unjudged, and they came from the four noisiest files in the repository.
-The cap is meant to bound wall time, but its effect is that the worst files get
-the least scrutiny.
+**The budget cap inverted on the files that needed it most (fixed).**
+`max_candidates = 10` is per file, and a file over the cap used to skip the
+judge entirely rather than judging the first ten. On structurella that sent 58
+of 170 candidates (34%) to the user unjudged, and they came from the four
+noisiest files in the repository. The cap is meant to bound wall time, but its
+effect was that the worst files got the least scrutiny.
+
+`local_llm` now judges the first N and passes the overflow through, still
+disarming blocking for that file because the overflow was never vetted.
+Re-measured: unjudged candidates fell from 58 to 18 (34% to 11%), judged rose
+from 112 to 152, and reported findings fell from 117 to 88 for 20s more wall
+time.
 
 **A regex would catch most of the true positives for free.** Section banners
 are the dominant true positive, and this is measured over the whole population
