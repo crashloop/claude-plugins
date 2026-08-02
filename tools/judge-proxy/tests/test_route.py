@@ -1,0 +1,51 @@
+"""End-to-end checks over the HTTP route, with the CLI faked out.
+
+httpx's ASGI transport rather than fastapi's TestClient: the replacement spare
+is warmed by a background task, and only a client sharing this test's event loop
+lets the test yield to that task deterministically. TestClient drives the app on
+its own portal, so `len(pool)` right after a response is a race.
+"""
+import asyncio
+
+import httpx
+import pytest
+
+import app as app_module
+from conftest import FakeJudge
+
+BODY = {"model": "qwen3:4b", "reasoning_effort": "none",
+        "messages": [{"role": "user", "content": "Judge item 1: `assert x`."}]}
+
+
+async def _settle() -> None:
+    """Let the fire-and-forget warm task reach the pool."""
+    for _ in range(3):
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_warm_flag_is_false_on_a_boot_and_true_on_a_reuse(pool):
+    transport = httpx.ASGITransport(app=app_module.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        first = (await client.post("/v1/chat/completions", json=BODY)).json()
+        assert first["x_judge_proxy"]["warm"] is False
+
+        await _settle()
+        assert len(pool) == 1, "the request must warm a replacement for its key"
+
+        second = (await client.post("/v1/chat/completions", json=BODY)).json()
+        assert second["x_judge_proxy"]["warm"] is True
+
+
+@pytest.mark.asyncio
+async def test_the_serving_process_is_killed_and_never_reused(pool):
+    """One prompt per process. A reused session would carry the previous file's
+    verdicts into the next judgment and grow the prompt on every call."""
+    transport = httpx.ASGITransport(app=app_module.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+        await client.post("/v1/chat/completions", json=BODY)
+        await _settle()
+
+    served = FakeJudge.made[0]
+    assert served.killed is True
+    assert served not in pool

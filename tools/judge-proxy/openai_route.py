@@ -292,5 +292,5 @@ async def chat_completions(request: Request):
                      "message": {"role": "assistant", "content": out.strip()}}],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
         "x_judge_proxy": {"seconds": round(time.monotonic() - started, 1),
-                          "thinking": not no_thinking},
+                          "thinking": not no_thinking, "warm": warm},
     }
