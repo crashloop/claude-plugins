@@ -81,3 +81,31 @@ def test_negative_spares_clamps_to_zero(monkeypatch):
     """A negative pool size has an obvious intent (none) and no useful error."""
     monkeypatch.setenv("JUDGE_PROXY_SPARES", "-1")
     assert max(0, int(os.environ["JUDGE_PROXY_SPARES"])) == 0
+
+
+@pytest.mark.asyncio
+async def test_dead_spare_is_never_served(pool):
+    await openai_route._warm(*HAIKU_FAST)
+    pool[0].crashed = True
+
+    judge, warm = await openai_route._take(*HAIKU_FAST)
+
+    assert warm is False, "a corpse must not be handed to a request"
+    assert judge.alive()
+
+
+@pytest.mark.asyncio
+async def test_dead_spare_behind_a_live_one_does_not_keep_a_slot(pool):
+    """A dead entry of another key is never reached by a key-matching scan,
+    so it would sit in the pool forever shrinking the effective cap."""
+    await openai_route._warm(*SONNET_SLOW)
+    pool[0].crashed = True
+    await openai_route._warm(*HAIKU_FAST)
+    corpse = pool[0]
+
+    judge, warm = await openai_route._take(*HAIKU_FAST)
+
+    assert warm is True
+    assert corpse not in pool
+    assert corpse.killed is True
+    assert pool == []

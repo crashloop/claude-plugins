@@ -169,6 +169,12 @@ async def _take(model: str, no_thinking: bool) -> tuple[_Judge, bool]:
     """
     key = (model, no_thinking)
     async with _lock:
+        # Sweep the whole list, not just up to the first key match: a dead entry
+        # of another key would otherwise hold a cap slot forever.
+        for judge in list(_pool):
+            if not judge.alive():
+                judge.kill()
+                _pool.remove(judge)
         for judge in _pool:
             if judge.key == key:
                 _pool.remove(judge)
