@@ -111,6 +111,12 @@ pattern = "—"
 `local_llm.base_url` is restricted to loopback and private addresses, so a
 project's config cannot ship your code to a public host.
 
+`local_llm.reasoning_effort` is passed to the endpoint verbatim under OpenAI's
+own field name, so an endpoint with no such control ignores it. Set it to
+`"none"` on rules whose candidates are decided by reading one span, and leave it
+unset where the verdict needs weighing. It is not a free win: it buys latency by
+removing deliberation, which is the thing a judge stage is for.
+
 ## Python AST rules
 
 These shortlist defects that no pattern can find, because the defect is a statement's

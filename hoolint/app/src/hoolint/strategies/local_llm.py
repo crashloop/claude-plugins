@@ -123,17 +123,24 @@ class LocalLLMStrategy:
             f"[{i}]\n{c.span_text}" for i, c in enumerate(candidates))
         prompt = stage["prompt"].format(span=numbered, code=ctx.content())
 
+        payload = {
+            "model": stage["model"],
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+        }
+        # How hard the endpoint should think, when the rule knows. OpenAI's own
+        # field name, so an endpoint that has no such control ignores it. Sent
+        # only when set: some servers reject unknown fields outright.
+        if "reasoning_effort" in stage:
+            payload["reasoning_effort"] = stage["reasoning_effort"]
+
         # An injected transport (tests) is used as-is; the real path pins the
         # connection to the address that was just validated above.
         transport = self._transport or _PinnedIPTransport(pinned_ip)
         with httpx.Client(base_url=base, transport=transport,
                           timeout=stage.get("timeout", 30)) as client:
             try:
-                r = client.post("/chat/completions", json={
-                    "model": stage["model"],
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0,
-                })
+                r = client.post("/chat/completions", json=payload)
                 r.raise_for_status()
             except httpx.HTTPStatusError as exc:
                 body = exc.response.text[:200]

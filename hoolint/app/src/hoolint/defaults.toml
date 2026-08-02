@@ -34,6 +34,9 @@ threshold = 0.30
 strategy = "local_llm"
 op = "and"
 model = "qwen3:4b"
+# The question is whether the comment says anything the adjacent code does not,
+# which is answered by reading the span. Endpoints without the control ignore it.
+reasoning_effort = "none"
 max_candidates = 10
 prompt = """Judge each numbered comment block below.
 Reply with one line per block: `[N] VIOLATION: <reason>` or `[N] OK: <reason>`.

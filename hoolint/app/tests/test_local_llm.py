@@ -89,6 +89,24 @@ def test_non_local_base_url_refused(tmp_path, monkeypatch):
     assert any("refused non-local" in n for n in ctx.notes)
 
 
+def test_reasoning_effort_forwarded_when_the_rule_sets_it(tmp_path):
+    """A rule cheap enough to need no deliberation must be able to say so."""
+    ctx = _ctx(tmp_path)
+    calls = []
+    strat = LocalLLMStrategy(transport=_transport("[0] VIOLATION: x", calls))
+    strat.run([_cand()], {**STAGE, "reasoning_effort": "none"}, ctx)
+    assert calls[0]["reasoning_effort"] == "none"
+
+
+def test_reasoning_effort_omitted_when_the_rule_does_not_set_it(tmp_path):
+    """Endpoints that reject unknown fields must not see it by default."""
+    ctx = _ctx(tmp_path)
+    calls = []
+    strat = LocalLLMStrategy(transport=_transport("[0] VIOLATION: x", calls))
+    strat.run([_cand()], STAGE, ctx)
+    assert "reasoning_effort" not in calls[0]
+
+
 def test_candidate_cap_skips_rather_than_hanging(tmp_path):
     ctx = _ctx(tmp_path)
     strat = LocalLLMStrategy(transport=_transport("[0] VIOLATION: x"))
