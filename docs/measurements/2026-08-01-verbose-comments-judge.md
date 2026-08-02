@@ -97,8 +97,56 @@ because the semantic stage had been gating most banners out before they reached
 it. Fourteen sampled were all genuine. They are warn, never blocking, and
 `modes = ["git"]` keeps them out of the session hook.
 
+## What the judge is worth on the cases a regex cannot settle
+
+The sampling above was done before `comment-banners` existed, so two thirds of
+what it scored were banners. Once those are handled by pattern, the judge is
+left with the ambiguous spans, and that is the population worth measuring. Three
+runs over structurella, 97 judged spans each:
+
+| | spans |
+| --- | --- |
+| confirmed in all 3 runs | 22 |
+| cleared in all 3 runs | 64 |
+| different verdict between runs | 11 |
+| confirmed per run | 26, 25, 28 |
+
+All 22 stable confirmations were read and labelled, not sampled. Twelve are
+real: four blocks of commented-out admin classes, an English gloss of a regex,
+three stub tests whose comments stand in for the assertions, and several
+banner-and-restatement pairs. Ten are not: a `SECURITY:` note explaining why
+`split_part` replaces `LIKE`, a record of why a `Subquery` annotation was
+abandoned, a measured `~1-2s` saving on a migrate flag, and similar. That is
+0.55 precision on a rule whose severity is `block`.
+
+Twelve of the 64 stable clears were sampled and ten were right, so the judge is
+still good at recognising a reason when it sees one. Its problem is confirming.
+
+## Two things that make the verdicts hard to trust
+
+**The same comment gets opposite verdicts in different files.** `auth_views.py`
+lines 226 to 228 and `oauth_views.py` lines 273 to 275 are byte-identical, three
+lines each. The first is confirmed in all three runs and the second is cleared
+in all three. Both are stable, so this is not sampling noise: the verdict is
+being driven by something other than the span it is asked to rule on.
+
+**Verdicts move when the batch around them changes.** `local_llm` sends one
+request per file with every candidate numbered. Excluding banners changed what
+else rode in each request, and spans flipped as a result:
+`load_demo_data.py:2720-2722` was cleared before the exclusion and is confirmed
+in all three runs after, while `serializers/__init__.py:236-238` went the other
+way. Neither comment changed.
+
+Both point the same way. A batched judge is cheap (one call per file rather than
+per candidate) but the batching is not free: the verdict on a span depends on
+its neighbours. Whether `block` is the right severity for a stage that is 0.55
+precise and 11% unstable is a decision this measurement does not make.
+
 ## Scope
 
-One model, one prompt, two repositories, samples of 12. The structurella
-numbers are the interesting ones; this repository's corpus contains no
-positives by construction.
+One model, one prompt, two repositories. The structurella numbers are the
+interesting ones; this repository's corpus contains no positives by
+construction. The 0.55 precision figure is over the whole stable-confirmed
+population rather than a sample, but the labels are one person's and several
+were close calls. The 11% instability and the two contradictions are not
+judgment calls: they are the same input scoring differently.
