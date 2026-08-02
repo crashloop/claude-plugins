@@ -111,6 +111,12 @@ pattern = "—"
 `local_llm.base_url` is restricted to loopback and private addresses, so a
 project's config cannot ship your code to a public host.
 
+`local_llm.max_candidates` is a per-file cap, and a file over it skips the judge
+entirely rather than judging the first N. Measured on one 914-file repository,
+that sent 34% of all candidates to the user unjudged, from the four noisiest
+files. See `docs/measurements/2026-08-01-verbose-comments-judge.md` for the full
+funnel and for what the judge stage removes.
+
 `local_llm.reasoning_effort` is passed to the endpoint verbatim under OpenAI's
 own field name, so an endpoint with no such control ignores it. Set it to
 `"none"` on rules whose candidates are decided by reading one span, and leave it
