@@ -10,12 +10,13 @@ Two boundaries this deliberately does NOT cross:
 - It is a benchmark harness, not a hoolint feature. Pointing `local_llm` here
   forwards file spans to Anthropic, which is precisely what `_resolve_pinned_ip`
   exists to prevent. Nothing in the hoolint package references it.
-- It is not for the Stop hook. Measured on this machine a judging prompt takes
-  15.7s to 31s, so it belongs in git mode and in precision measurement. In
-  session mode use the `escalate` stage, which costs nothing extra because the
-  session model is already running.
+- It is not for the Stop hook. Even judged with thinking off a call costs
+  seconds, so it belongs in git mode and in precision measurement. In session
+  mode use the `escalate` stage, which costs nothing extra because the session
+  model is already running.
 """
 import asyncio
+import json
 import os
 import time
 import uuid
@@ -28,6 +29,23 @@ router = APIRouter()
 DEFAULT_MODEL = os.environ.get("JUDGE_PROXY_MODEL", "haiku")
 TIMEOUT_S = float(os.environ.get("JUDGE_PROXY_TIMEOUT", "120"))
 
+# Thinking is the latency budget, not the prompt size. Measured over 3 runs on
+# this box: thinking on costs 19.5-33.8s wall and 645-992 output tokens for a
+# one-line verdict; MAX_THINKING_TOKENS=0 costs 1.9-2.4s of API time and 67-88
+# tokens, same verdict. A rule that needs no deliberation says so by sending
+# `reasoning_effort`. `--effort low` was measured and changed nothing.
+_NO_THINKING = {"none", "minimal"}
+
+# The default system prompt carries ~35k tokens of Claude Code chrome, the
+# operator's CLAUDE.md and their hook output, against a judging prompt of ~10.
+# That is cost, but mainly contamination: the judge should rule on the span it
+# was given, not inherit whatever the operator told their session model to
+# prefer. Replacing it cuts the prefill to ~7.5k. Latency was unchanged, so this
+# is a correctness and cost change, not a speed one.
+BASE_ARGS = ["-p", "--input-format", "stream-json", "--output-format",
+             "stream-json", "--verbose", "--max-turns", "1", "--tools", "",
+             "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}']
+
 # Without this the CLI answers in prose ("I need to see the test code context...")
 # and hoolint's verdict regex matches nothing, so every candidate is silently
 # dropped. A dropped candidate never blocks, so the failure looks like a clean
@@ -39,6 +57,138 @@ VERDICT_FORMAT = (
     "no markdown, no bold, no blank lines, no trailing commentary. Judge on the "
     "evidence given; never ask for more context."
 )
+
+
+class _Judge:
+    """One CLI process in streaming mode, booted before the request needs it.
+
+    Streaming input rather than a plain `-p` pipe because the process must be
+    able to sit idle after boot and take its prompt later. Measured: boot is
+    2.2-3.4s and swings to 14s under load, while a booted process answers in
+    4-5s and does not degrade over an 8s idle. A plain `-p` pipe cannot be
+    prewarmed at all: it does its work only once stdin closes, and one probe run
+    returned no result when stdin was held open.
+    """
+
+    def __init__(self, model: str, no_thinking: bool):
+        self.key = (model, no_thinking)
+        self._proc: asyncio.subprocess.Process | None = None
+
+    async def start(self) -> None:
+        """Spawn and block until the CLI announces the session is up."""
+        env = dict(os.environ)
+        if self.key[1]:
+            env["MAX_THINKING_TOKENS"] = "0"
+        self._proc = await asyncio.create_subprocess_exec(
+            "claude", *BASE_ARGS, "--model", self.key[0],
+            "--system-prompt", VERDICT_FORMAT,
+            stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE, env=env)
+        line = await asyncio.wait_for(self._proc.stdout.readline(), TIMEOUT_S)
+        if b'"init"' not in line and b'"system"' not in line:
+            raise RuntimeError(f"no init line from claude: {line[:200]!r}")
+
+    async def ask(self, prompt: str) -> str:
+        """Send one prompt and read until the CLI reports a result.
+
+        Raises:
+            RuntimeError: The process died or ended the stream without a result.
+        """
+        proc = self._proc
+        msg = json.dumps({"type": "user", "message": {
+            "role": "user", "content": [{"type": "text", "text": prompt}]}})
+        proc.stdin.write((msg + "\n").encode())
+        await proc.stdin.drain()
+
+        # `result.result` has come back empty in probing, so assistant text is
+        # accumulated as it streams and used as the fallback.
+        chunks: list[str] = []
+        while True:
+            line = await proc.stdout.readline()
+            if not line:
+                err = (await proc.stderr.read())[:300].decode(errors="replace")
+                raise RuntimeError(f"claude ended without a result: {err.strip()}")
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("type") == "assistant":
+                for part in event.get("message", {}).get("content", []):
+                    if part.get("type") == "text":
+                        chunks.append(part.get("text", ""))
+            elif event.get("type") == "result":
+                return str(event.get("result") or "".join(chunks))
+
+    def alive(self) -> bool:
+        return self._proc is not None and self._proc.returncode is None
+
+    def kill(self) -> None:
+        if self.alive():
+            self._proc.kill()
+
+
+# One spare, not a pool. Judging is serial per file and the benchmark runs one
+# rule at a time, so a second spare would idle. A request whose key differs from
+# the spare's just pays the boot.
+_spare: _Judge | None = None
+_lock = asyncio.Lock()
+# asyncio keeps only a weak reference to a running task, so a fire-and-forget
+# prewarm can be collected mid-boot. Holding it here is what makes it happen.
+_warming: set[asyncio.Task] = set()
+
+
+async def _warm(model: str, no_thinking: bool) -> None:
+    """Boot a replacement spare, discarding it if one is already parked."""
+    global _spare
+    judge = _Judge(model, no_thinking)
+    try:
+        await judge.start()
+    except (OSError, RuntimeError, asyncio.TimeoutError):
+        return  # Prewarming is an optimisation; a failure must not fail a request.
+    async with _lock:
+        if _spare is None:
+            _spare = judge
+            return
+    judge.kill()
+
+
+async def _take(model: str, no_thinking: bool) -> _Judge:
+    """Return a ready process, using the parked spare when it matches."""
+    global _spare
+    async with _lock:
+        judge, _spare = _spare, None
+    # A spare that died while parked (the CLI has its own idle timeout) must not
+    # be handed out: the request would 502 and hoolint would quietly demote the
+    # rule to advisory on what is really a harness problem.
+    if judge is not None and judge.key == (model, no_thinking) and judge.alive():
+        return judge
+    if judge is not None:
+        judge.kill()
+    fresh = _Judge(model, no_thinking)
+    await fresh.start()
+    return fresh
+
+
+async def _startup() -> None:
+    """Park a spare before the first request, guessing the common key.
+
+    Rules that judge through this proxy are expected to set
+    `reasoning_effort = "none"`, so that is the guess. A request that wants
+    thinking discards the spare and pays the boot once.
+    """
+    await _warm(DEFAULT_MODEL, no_thinking=True)
+
+
+def _shutdown() -> None:
+    """Kill the parked spare so uvicorn does not leave an orphan CLI behind."""
+    global _spare
+    if _spare is not None:
+        _spare.kill()
+        _spare = None
+
+
+router.add_event_handler("startup", _startup)
+router.add_event_handler("shutdown", _shutdown)
 
 
 def _flatten(content) -> str:
@@ -61,44 +211,14 @@ def _prompt_from(messages: list) -> str:
                        for m in messages)
 
 
-async def _run_claude(prompt: str, model: str) -> tuple[int, str, str]:
-    """Run one `claude -p`, feeding the prompt on stdin.
-
-    stdin rather than argv: prompts carry code spans with quotes, newlines and
-    backslashes, and argv has both a length ceiling and a quoting hazard.
-
-    Tools are disabled and turns capped at one. The judge is asked to rule on the
-    text it was given, and a judge that can read the filesystem could reach past
-    the span it is judging.
-
-    Returns:
-        (returncode, stdout, stderr), all decoded.
-    """
-    proc = await asyncio.create_subprocess_exec(
-        "claude", "-p", "--model", model, "--allowed-tools", "",
-        "--max-turns", "1", "--append-system-prompt", VERDICT_FORMAT,
-        stdin=asyncio.subprocess.PIPE,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    try:
-        out, err = await asyncio.wait_for(
-            proc.communicate(prompt.encode()), timeout=TIMEOUT_S)
-    except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
-        return 124, "", f"claude -p exceeded {TIMEOUT_S}s"
-    return (proc.returncode or 0, out.decode(errors="replace"),
-            err.decode(errors="replace"))
-
-
 @router.post("/v1/chat/completions")
 async def chat_completions(request: Request):
     """Answer an OpenAI chat completion by running the Claude Code CLI.
 
     Only the fields hoolint reads are populated. `model` from the request is
     ignored unless it names a Claude model: rules configure names like
-    `qwen3:4b`, which would be meaningless to the CLI.
+    `qwen3:4b`, which would be meaningless to the CLI. `reasoning_effort` is
+    honoured as an on/off switch, since only "off" measured as different.
     """
     try:
         body = await request.json()
@@ -114,16 +234,33 @@ async def chat_completions(request: Request):
     requested = str(body.get("model", ""))
     model = requested if requested.startswith(("claude", "haiku", "sonnet", "opus")) \
         else DEFAULT_MODEL
+    no_thinking = str(body.get("reasoning_effort", "")).lower() in _NO_THINKING
 
     started = time.monotonic()
-    code, out, err = await _run_claude(_prompt_from(messages), model)
-    if code != 0:
+    try:
+        judge = await _take(model, no_thinking)
+    except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
+        return JSONResponse(status_code=502, content={
+            "error": {"type": "api_error", "message": f"claude failed to start: {exc}"}})
+
+    try:
+        out = await asyncio.wait_for(
+            judge.ask(_prompt_from(messages)), timeout=TIMEOUT_S)
+    except (asyncio.TimeoutError, RuntimeError) as exc:
         # 502 rather than a 200 with empty content: hoolint treats an HTTP error
         # as "judge unavailable" and demotes the rule to advisory, whereas an
         # empty 200 would read as "every candidate cleared".
+        detail = f"timed out after {TIMEOUT_S}s" if isinstance(
+            exc, asyncio.TimeoutError) else str(exc)[:300]
         return JSONResponse(status_code=502, content={
-            "error": {"type": "api_error",
-                      "message": f"claude -p failed ({code}): {err.strip()[:300]}"}})
+            "error": {"type": "api_error", "message": f"claude -p failed: {detail}"}})
+    finally:
+        # One prompt per process: a reused session would carry the previous
+        # file's verdicts into the next judgment and grow the prompt each call.
+        judge.kill()
+        task = asyncio.create_task(_warm(model, no_thinking))
+        _warming.add(task)
+        task.add_done_callback(_warming.discard)
 
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:24]}",
@@ -133,5 +270,6 @@ async def chat_completions(request: Request):
         "choices": [{"index": 0, "finish_reason": "stop",
                      "message": {"role": "assistant", "content": out.strip()}}],
         "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-        "x_judge_proxy": {"seconds": round(time.monotonic() - started, 1)},
+        "x_judge_proxy": {"seconds": round(time.monotonic() - started, 1),
+                          "thinking": not no_thinking},
     }
