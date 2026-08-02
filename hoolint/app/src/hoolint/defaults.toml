@@ -6,7 +6,10 @@ semantic_model = "minishlab/potion-base-8M"
 [[rule]]
 id = "verbose-comments"
 globs = ["**/*.py"]
-severity = "block"
+# Advisory, not blocking: measured over three runs of the judge stage on 97
+# ambiguous spans, precision was 0.55 and 11% of verdicts changed between runs.
+# See docs/measurements/2026-08-01-verbose-comments-judge.md.
+severity = "warn"
 
 [[rule.stage]]
 strategy = "regex"

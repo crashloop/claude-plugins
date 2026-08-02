@@ -35,6 +35,11 @@ neither, just with fewer tiers.
    no endpoint) demotes that rule to advisory for the run — an
    incompletely-configured install reports but never blocks.
 
+Every rule that ships is `warn`, so a stock install reports and never blocks.
+Blocking is opt-in: set `severity = "block"` on the rules you trust enough to
+stop a session for. `verbose-comments` was the last one to block and was
+demoted on measurement, see below.
+
 ## Waivers
 
 `hoolint waive <fingerprint> --reason "<why>"` writes to
@@ -90,6 +95,15 @@ positives: "may or may not be synced" is precision, and "What's in This Section"
 is a heading. `utilization` is spared because it is domain vocabulary
 ("connection pool utilization") and appears inside test ids. As with
 `em-dashes`, this paragraph trips its own rule. Waive it.
+
+`verbose-comments` is advisory rather than blocking, because its verdict comes
+from an LLM and that verdict was measured. Over three runs against the 97
+ambiguous spans left after `comment-banners` takes the easy ones, the judge
+confirmed at 0.55 precision and gave 11% of spans a different verdict between
+runs. Two byte-identical comments in different files got opposite verdicts,
+stably. A stage that cannot reproduce itself should not stop a session. It still
+reports, and its `escalate` stage still hands the shortlist to the session
+model, but as advice rather than as a gate.
 
 `comment-banners` warns on a `# =====` rule, one title line, another rule. The
 title repeats the name of the `def` or the section beneath it, so the block is

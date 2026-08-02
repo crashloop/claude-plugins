@@ -10,6 +10,21 @@ def test_defaults_load_without_project_file(tmp_path):
     assert cfg.settings["stand_down_after"] == 2
 
 
+def test_judged_rules_are_advisory(tmp_path):
+    """A rule gated by `local_llm` must not block the stop.
+
+    Measured over three runs on 97 ambiguous spans, that judge confirmed at 0.55
+    precision and gave 11% of spans a different verdict between runs, including
+    opposite stable verdicts on two byte-identical comments. See
+    docs/measurements/2026-08-01-verbose-comments-judge.md.
+    """
+    judged = [r for r in load_config(tmp_path).rules
+              if any(s["strategy"] == "local_llm" for s in r.get("stage", []))]
+    assert judged, "no judged rule found: this pin is watching nothing"
+    for rule in judged:
+        assert rule["severity"] == "warn", f"{rule['id']} blocks on an LLM verdict"
+
+
 def test_project_overrides_wholesale_and_disables(tmp_path):
     (tmp_path / "hoolint.toml").write_text(
         '[settings]\nstand_down_after = 5\n'
