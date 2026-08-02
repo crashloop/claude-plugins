@@ -127,10 +127,10 @@ class _Judge:
             self._proc.kill()
 
 
-# One spare, not a pool. Judging is serial per file and the benchmark runs one
-# rule at a time, so a second spare would idle. A request whose key differs from
-# the spare's just pays the boot.
-_spare: _Judge | None = None
+# A pool, not one spare: several rules judge at once and their (model, thinking)
+# keys differ, so one slot would be killed and rebooted on every other request.
+SPARES = max(0, int(os.environ.get("JUDGE_PROXY_SPARES", "4")))
+_pool: list[_Judge] = []        # oldest boot first
 _lock = asyncio.Lock()
 # asyncio keeps only a weak reference to a running task, so a fire-and-forget
 # prewarm can be collected mid-boot. Holding it here is what makes it happen.
@@ -138,53 +138,62 @@ _warming: set[asyncio.Task] = set()
 
 
 async def _warm(model: str, no_thinking: bool) -> None:
-    """Boot a replacement spare, discarding it if one is already parked."""
-    global _spare
+    """Boot a spare and park it, evicting the oldest if the pool is full.
+
+    Args:
+        model: Model name the spare is booted with.
+        no_thinking: Whether the spare runs with thinking disabled.
+    """
+    if SPARES <= 0:
+        return
     judge = _Judge(model, no_thinking)
     try:
         await judge.start()
     except (OSError, RuntimeError, asyncio.TimeoutError):
         return  # Prewarming is an optimisation; a failure must not fail a request.
     async with _lock:
-        if _spare is None:
-            _spare = judge
-            return
-    judge.kill()
+        while _pool and len(_pool) >= SPARES:
+            _pool.pop(0).kill()
+        _pool.append(judge)
 
 
-async def _take(model: str, no_thinking: bool) -> _Judge:
-    """Return a ready process, using the parked spare when it matches."""
-    global _spare
+async def _take(model: str, no_thinking: bool) -> tuple[_Judge, bool]:
+    """Return a ready process, reusing a parked spare when one matches.
+
+    Args:
+        model: Model name the request wants.
+        no_thinking: Whether the request wants thinking disabled.
+
+    Returns:
+        The judge to serve this request, and whether it came from the pool.
+    """
+    key = (model, no_thinking)
     async with _lock:
-        judge, _spare = _spare, None
-    # A spare that died while parked (the CLI has its own idle timeout) must not
-    # be handed out: the request would 502 and hoolint would quietly demote the
-    # rule to advisory on what is really a harness problem.
-    if judge is not None and judge.key == (model, no_thinking) and judge.alive():
-        return judge
-    if judge is not None:
-        judge.kill()
+        for judge in _pool:
+            if judge.key == key:
+                _pool.remove(judge)
+                return judge, True
+    # Booting outside the lock: holding it across a 3s boot would serialize
+    # every concurrent request behind the first, which is what this pool fixes.
     fresh = _Judge(model, no_thinking)
     await fresh.start()
-    return fresh
+    return fresh, False
 
 
 async def _startup() -> None:
-    """Park a spare before the first request, guessing the common key.
+    """Park one spare before the first request, guessing the common key.
 
     Rules that judge through this proxy are expected to set
-    `reasoning_effort = "none"`, so that is the guess. A request that wants
-    thinking discards the spare and pays the boot once.
+    `reasoning_effort = "none"`, so that is the guess. The remaining slots fill
+    from real traffic, since the keys in use are not knowable in advance.
     """
     await _warm(DEFAULT_MODEL, no_thinking=True)
 
 
 def _shutdown() -> None:
-    """Kill the parked spare so uvicorn does not leave an orphan CLI behind."""
-    global _spare
-    if _spare is not None:
-        _spare.kill()
-        _spare = None
+    """Kill every parked spare so uvicorn leaves no orphan CLI behind."""
+    while _pool:
+        _pool.pop().kill()
 
 
 router.add_event_handler("startup", _startup)
@@ -238,7 +247,7 @@ async def chat_completions(request: Request):
 
     started = time.monotonic()
     try:
-        judge = await _take(model, no_thinking)
+        judge, warm = await _take(model, no_thinking)
     except (OSError, RuntimeError, asyncio.TimeoutError) as exc:
         return JSONResponse(status_code=502, content={
             "error": {"type": "api_error", "message": f"claude failed to start: {exc}"}})

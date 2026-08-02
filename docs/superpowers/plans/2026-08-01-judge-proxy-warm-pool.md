@@ -40,6 +40,23 @@ measurement sends `reasoning_effort` and would otherwise measure a thinking judg
 - `tools/judge-proxy/app.py`, `refusals.py`, and the JSON fixtures are inherited from the `llm-faker` fork and must not be edited. `pyproject.toml` gets exactly the two additions in Task 1 and no others.
 - Do not add anything to the `hoolint` package that references this proxy. It is a benchmark harness that forwards code to Anthropic, which is what hoolint's loopback pinning exists to prevent.
 
+## Task dependencies
+
+| task | depends on | writes |
+| --- | --- | --- |
+| 1 pool structure and test harness | none | `pyproject.toml`, `openai_route.py`, `tests/conftest.py`, `tests/test_pool.py` |
+| 2 cap, clamping, disable switch | 1 | `tests/test_pool.py` |
+| 3 sweep dead spares | 1 | `openai_route.py` (`_take`), `tests/test_pool.py` |
+| 4 concurrency and lock discipline | 1, 3 | `tests/test_pool.py` |
+| 5 bound processes in flight | 1 | `openai_route.py`, `tests/test_pool.py` |
+| 6 report served-warm | 1, 5 | `openai_route.py`, `tests/test_route.py` |
+| 7 measure and document | 6 | `bench_pool.py`, `README.md` |
+
+Every task after 1 writes either `openai_route.py` or `tests/test_pool.py`, and
+2 through 5 write the same append point in that test file. The graph therefore
+has no parallelizable batch: run 1 through 7 in order. Task 4's tests pass only
+against Task 3's swept `_take`, so 4 follows 3 rather than running beside it.
+
 ---
 
 ### Task 1: Test harness and the pool structure
