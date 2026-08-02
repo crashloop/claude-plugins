@@ -127,12 +127,26 @@ class _Judge:
             self._proc.kill()
 
 
+def _cap(name: str, default: str, floor: int) -> int:
+    """Read an int env var, clamping it to a floor.
+
+    Args:
+        name: Environment variable to read.
+        default: Value used when the variable is unset.
+        floor: Smallest value that has a working meaning.
+
+    Returns:
+        The clamped setting.
+    """
+    return max(floor, int(os.environ.get(name, default)))
+
+
 # A pool, not one spare: several rules judge at once and their (model, thinking)
 # keys differ, so one slot would be killed and rebooted on every other request.
-SPARES = max(0, int(os.environ.get("JUDGE_PROXY_SPARES", "4")))
-# SPARES bounds idle memory; this bounds peak. Requests over the limit queue
-# rather than fail, so no new error path reaches hoolint.
-MAX_INFLIGHT = max(1, int(os.environ.get("JUDGE_PROXY_MAX_INFLIGHT", "8")))
+SPARES = _cap("JUDGE_PROXY_SPARES", "4", 0)
+# SPARES bounds parked processes, this bounds serving ones. Requests over the
+# limit queue rather than fail, so no new error path reaches hoolint.
+MAX_INFLIGHT = _cap("JUDGE_PROXY_MAX_INFLIGHT", "8", 1)
 _inflight = asyncio.Semaphore(MAX_INFLIGHT)
 _pool: list[_Judge] = []        # oldest boot first
 _lock = asyncio.Lock()
@@ -200,8 +214,15 @@ async def _startup() -> None:
     await _warm(DEFAULT_MODEL, no_thinking=True)
 
 
-def _shutdown() -> None:
-    """Kill every parked spare so uvicorn leaves no orphan CLI behind."""
+async def _shutdown() -> None:
+    """Kill every spare so uvicorn leaves no orphan CLI behind.
+
+    Prewarms in flight are awaited first. A warm that lands after the drain
+    parks a booted CLI into a pool nobody will empty again, and that process
+    outlives the server.
+    """
+    if _warming:
+        await asyncio.wait(set(_warming), timeout=TIMEOUT_S)
     while _pool:
         _pool.pop().kill()
 

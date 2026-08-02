@@ -92,9 +92,15 @@ process booted the way it wants. `JUDGE_PROXY_SPARES` caps how many are parked
 (default 4, oldest evicted first, 0 turns prewarming off). A request takes the
 first live spare matching its key or boots its own, and warms a replacement for
 that key after answering, so within a rule only the first file pays a boot.
-`JUDGE_PROXY_MAX_INFLIGHT` (default 8) separately caps processes in flight,
-since each is roughly 277MB and the parked cap says nothing about peak. It sits
-above hoolint's 4-thread ceiling, so it never engages for the real caller.
+`JUDGE_PROXY_MAX_INFLIGHT` (default 8) separately caps requests being served at
+once, since each holds a process of roughly 277MB and the parked cap says
+nothing about peak. It sits above hoolint's 4-thread ceiling, so it never
+engages for the real caller. Replacement spares boot outside that limit, so the
+true ceiling is about `2 * MAX_INFLIGHT + SPARES` processes, not `MAX_INFLIGHT`.
+
+Shutdown waits for prewarms still booting before it kills the pool. Without
+that wait a spare lands in a pool nobody empties again and the CLI outlives the
+server.
 
 One slot was right while `verbose-comments` was the only `local_llm` rule. With
 several rules judging at once, a mismatched key was killed on take and rebooted

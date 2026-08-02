@@ -47,8 +47,12 @@ async def _round(n: int) -> list[tuple[float, bool]]:
 async def main() -> None:
     n = int(sys.argv[1]) if len(sys.argv) > 1 else 4
 
-    baseline = (await _round(1))[0][0]
-    print(f"N=1 warm baseline:  {baseline:5.1f}s")
+    baseline, baseline_warm = (await _round(1))[0]
+    print(f"N=1 warm baseline:  {baseline:5.1f}s  warm={baseline_warm}")
+    # A cold baseline includes a boot, which inflates the denominator and lets
+    # the ratio below pass while proving nothing.
+    if not baseline_warm:
+        sys.exit("baseline was served cold; restart the proxy and re-run")
 
     await asyncio.sleep(8)
     cold = await _round(n)

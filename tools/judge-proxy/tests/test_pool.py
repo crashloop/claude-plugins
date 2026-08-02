@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 import pytest
 
@@ -47,7 +46,7 @@ async def test_shutdown_kills_every_parked_spare(pool):
     await openai_route._warm(*SONNET_SLOW)
     parked = list(pool)
 
-    openai_route._shutdown()
+    await openai_route._shutdown()
 
     assert pool == []
     assert all(j.killed for j in parked)
@@ -80,7 +79,13 @@ async def test_spares_zero_parks_nothing_and_does_not_raise(pool, monkeypatch):
 def test_negative_spares_clamps_to_zero(monkeypatch):
     """A negative pool size has an obvious intent (none) and no useful error."""
     monkeypatch.setenv("JUDGE_PROXY_SPARES", "-1")
-    assert max(0, int(os.environ["JUDGE_PROXY_SPARES"])) == 0
+    assert openai_route._cap("JUDGE_PROXY_SPARES", "4", 0) == 0
+
+
+def test_inflight_cap_never_clamps_below_one(monkeypatch):
+    """A zero semaphore would deadlock every request rather than fail loudly."""
+    monkeypatch.setenv("JUDGE_PROXY_MAX_INFLIGHT", "0")
+    assert openai_route._cap("JUDGE_PROXY_MAX_INFLIGHT", "8", 1) == 1
 
 
 @pytest.mark.asyncio
