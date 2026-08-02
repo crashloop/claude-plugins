@@ -15,7 +15,10 @@ strategy = "regex"
 pattern = "(?m)(^[ \\t]*# [^\\n]*\\n){3,}"
 exclude = ["(?i)(copyright|SPDX-License|licensed under)",
            "(?i)# *(noqa|type: *ignore|pylint|pragma|fmt: *off)",
-           "^[ \\t]*# *(def |class |import |from |return |if |for |while )"]
+           "^[ \\t]*# *(def |class |import |from |return |if |for |while )",
+           # Anything fenced by a banner rule belongs to `comment-banners`, which
+           # decides it for free. Judging these was 66% of this rule's LLM calls.
+           "(?m)^[ \\t]*#[ \\t]*[-=*_#]{6,}[ \\t]*$"]
 message = "more than 2 consecutive comment lines"
 
 [[rule.stage]]
@@ -53,6 +56,23 @@ prompt = """Could this comment be expressed in at most 2 lines without losing
 meaning? If yes, rewrite it. If it is genuinely necessary as written, leave it
 and say so — do NOT waive on your own judgment. Waive only if the user
 explicitly asked for this comment, and record that in the reason."""
+
+[[rule]]
+id = "comment-banners"
+globs = ["**/*.py"]
+severity = "warn"
+
+[[rule.stage]]
+strategy = "regex"
+# A rule/title/rule block is decoration: the title repeats the name of the `def`
+# or the section under it. One line between the rules is a title; two or more is
+# usually a real note, and those are left to verbose-comments and its judge.
+# Measured on structurella: 39 of 59 judge-confirmed spans, 1 of 53 it cleared.
+pattern = """\
+(?m)^[ \\t]*#[ \\t]*[-=*_#]{6,}[ \\t]*\\n\
+[ \\t]*#[^\\n]*\\n\
+[ \\t]*#[ \\t]*[-=*_#]{6,}[ \\t]*$"""
+message = "section banner comment: the code below already says what section this is"
 
 [[rule]]
 id = "doc-broken-links"

@@ -73,12 +73,29 @@ Re-measured: unjudged candidates fell from 58 to 18 (34% to 11%), judged rose
 from 112 to 152, and reported findings fell from 117 to 88 for 20s more wall
 time.
 
-**A regex would catch most of the true positives for free.** Section banners
-are the dominant true positive, and this is measured over the whole population
-rather than the sample: `^[ \t]*#[ =-]{10,}$` matches a line in 40 of the 59
-confirmed spans (68%) and in only 5 of the 53 cleared ones (9%). A cheap rule
-for banners would take that work off the judge and leave it the genuinely
-ambiguous spans, which is what a judge stage is for.
+**A regex caught most of the true positives for free (shipped).** Section
+banners are the dominant true positive, measured over the whole population
+rather than the sample. A loose `^[ \t]*#[ =-]{10,}$` matches a line in 40 of
+the 59 confirmed spans and 5 of the 53 cleared. Tightening it to the whole
+block, a rule line then exactly one title line then another rule line, splits
+the two classes almost perfectly: 39 of 59 confirmed, 1 of 53 cleared.
+
+That pattern shipped as the `comment-banners` rule, and `verbose-comments` now
+excludes any span fenced by a banner rule. Re-measured on structurella:
+
+| | before | after |
+| --- | --- | --- |
+| verbose-comments candidates | 170 | 106 |
+| judged | 152 | 97 |
+| unjudged overflow | 18 | 9 |
+| confirmed | 70 | 26 |
+| wall time | 3m38s | 2m41s |
+
+The cost side went as predicted. The volume side did not: `comment-banners`
+reports 205 findings across 45 files, five times what the judge ever saw,
+because the semantic stage had been gating most banners out before they reached
+it. Fourteen sampled were all genuine. They are warn, never blocking, and
+`modes = ["git"]` keeps them out of the session hook.
 
 ## Scope
 

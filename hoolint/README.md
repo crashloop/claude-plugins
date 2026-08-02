@@ -91,6 +91,20 @@ is a heading. `utilization` is spared because it is domain vocabulary
 ("connection pool utilization") and appears inside test ids. As with
 `em-dashes`, this paragraph trips its own rule. Waive it.
 
+`comment-banners` warns on a `# =====` rule, one title line, another rule. The
+title repeats the name of the `def` or the section beneath it, so the block is
+decoration. It exists because it is free: measured against a judged run of
+`verbose-comments`, the pattern matched 39 of the 59 spans the judge confirmed
+and 1 of the 53 it cleared, so a regex settles two thirds of that rule's
+verdicts at no cost. `verbose-comments` now excludes any span fenced by a banner
+rule, which cut its judged population by 36% and a full run by a minute.
+
+Expect volume on a codebase that uses banners as section headers. The semantic
+stage had been hiding most of them: structurella reports 205 across 45 files,
+one settings module holding 30. They are advisory, never blocking. Set
+`modes = ["git"]` to keep them out of the session hook, or disable the rule
+outright, if that trade is wrong for your repository.
+
 `exclude_globs` narrows any rule's file scope after `globs` has widened it. Use
 it for text nobody in the repository wrote: vendored library dumps, generated
 API references, skill files that quote bad prose as examples. Without it, a
