@@ -6,9 +6,11 @@ given candidates. What the three share is knowing where a fenced code block is,
 so a quoted sample is never read as authored content.
 """
 import re
+from pathlib import Path
 
 import re2
 
+from hoolint.changes import run_git
 from hoolint.findings import Finding
 from hoolint.strategies.base import Context, rel_to_root
 
@@ -150,6 +152,37 @@ class DocLinksStrategy:
 
 
 class DocRefsStrategy:
+    """Flags backticked file references that name no file in the repo.
+
+    A doc says which directory it works from and then names files relative to
+    it, so root- and sibling-relative resolution alone reads a correct reference
+    as drift. Measured on this repo, that was 121 of 142 findings.
+    """
+
+    def __init__(self):
+        # ponytail: one index per root, never invalidated. The CLI is one
+        # process per run; add a mtime check if that stops being true.
+        self._segments: dict[Path, set[str]] = {}
+
+    def _tracked(self, root: Path) -> set[str]:
+        """Every path-segment suffix of every tracked file, e.g. `a/b.py`, `b.py`.
+
+        Args:
+            root: Repository root to index.
+
+        Returns:
+            The suffix set, empty outside a git repository.
+        """
+        if root not in self._segments:
+            out: set[str] = set()
+            r = run_git(root, "ls-files", check=False)
+            if r.returncode == 0:
+                for path in r.stdout.split("\n"):
+                    parts = path.strip().split("/")
+                    out.update("/".join(parts[i:]) for i in range(len(parts)) if path)
+            self._segments[root] = out
+        return self._segments[root]
+
     def run(self, candidates: list[Finding] | None, stage: dict,
             ctx: Context) -> list[Finding]:
         """Flag backticked file references that don't exist in the repo.
@@ -160,15 +193,17 @@ class DocRefsStrategy:
             ctx: Per-file execution context.
 
         Returns:
-            One finding per backticked path that resolves to no real file.
+            One finding per backticked path that names no tracked file.
         """
+        tracked = self._tracked(ctx.root)
         out = []
         for i, ln in enumerate(ctx.content().splitlines(), 1):
             for m in _REF.finditer(ln):
-                ref = m.group(1)
-                if not (ctx.root / ref).exists() and not (ctx.path.parent / ref).exists():
-                    out.append(_finding(ctx, i, ref,
-                                        f"references missing file: {ref}"))
+                ref = m.group(1).strip("/")
+                if (ref in tracked or (ctx.root / ref).exists()
+                        or (ctx.path.parent / ref).exists()):
+                    continue
+                out.append(_finding(ctx, i, ref, f"references missing file: {ref}"))
         return out
 
 

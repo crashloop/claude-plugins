@@ -23,6 +23,65 @@ def test_missing_backticked_path_flagged(tmp_path):
     assert [f.span_text for f in found] == ["gone/old.py"]
 
 
+def _repo(tmp_path):
+    """A git repo, because a reference resolves against what git tracks."""
+    import subprocess
+    for args in (("init", "-b", "main"), ("config", "user.email", "t@t"),
+                 ("config", "user.name", "t")):
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+    return tmp_path
+
+
+def test_reference_to_a_file_elsewhere_in_the_repo_is_not_drift(tmp_path):
+    """A doc that says which directory it works from names files relative to it.
+
+    Measured on this repo, 121 of 142 doc-drift findings were this: a real file
+    named without the prefix that would make it root-relative.
+    """
+    import subprocess
+    _repo(tmp_path)
+    (tmp_path / "tools" / "judge-proxy").mkdir(parents=True)
+    (tmp_path / "tools" / "judge-proxy" / "openai_route.py").write_text("x = 1\n")
+    md = tmp_path / "docs" / "plan.md"
+    md.parent.mkdir()
+    md.write_text("All commands run from `tools/judge-proxy/`. Edit `openai_route.py`.\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    assert run(Config(rules=[REFS], settings={}), [md], tmp_path, "git") == []
+
+
+def test_a_reference_matching_no_tracked_file_is_still_drift(tmp_path):
+    import subprocess
+    _repo(tmp_path)
+    (tmp_path / "kept.py").write_text("x = 1\n")
+    md = tmp_path / "doc.md"
+    md.write_text("See `kept.py` and `renamed_away.py`.\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    found = run(Config(rules=[REFS], settings={}), [md], tmp_path, "git")
+    assert [f.span_text for f in found] == ["renamed_away.py"]
+
+
+def test_a_partial_segment_match_is_still_drift(tmp_path):
+    """`route.py` must not resolve against `openai_route.py`. The match is on
+    whole path segments, so a raw string suffix is not enough."""
+    import subprocess
+    _repo(tmp_path)
+    (tmp_path / "openai_route.py").write_text("x = 1\n")
+    md = tmp_path / "doc.md"
+    md.write_text("See `route.py`.\n")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True, capture_output=True)
+    found = run(Config(rules=[REFS], settings={}), [md], tmp_path, "git")
+    assert [f.span_text for f in found] == ["route.py"]
+
+
+def test_reference_resolution_outside_a_git_repo_is_unchanged(tmp_path):
+    """No git, no index: fall back to root- and sibling-relative as before."""
+    (tmp_path / "real.py").write_text("x = 1\n")
+    md = tmp_path / "doc.md"
+    md.write_text("See `real.py` and `gone/old.py`.\n")
+    found = run(Config(rules=[REFS], settings={}), [md], tmp_path, "git")
+    assert [f.span_text for f in found] == ["gone/old.py"]
+
+
 def test_titled_link_to_existing_file_not_flagged(tmp_path):
     (tmp_path / "real.md").write_text("x")
     md = tmp_path / "doc.md"

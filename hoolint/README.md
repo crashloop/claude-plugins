@@ -96,6 +96,17 @@ is a heading. `utilization` is spared because it is domain vocabulary
 ("connection pool utilization") and appears inside test ids. As with
 `em-dashes`, this paragraph trips its own rule. Waive it.
 
+`doc-drift` flags a backticked filename that names no tracked file. It resolves
+a reference three ways: against the repo root, against the doc's own directory,
+and against any path-segment suffix of a tracked file, so a doc that states the
+directory it works from can write `` `openai_route.py` `` for
+`tools/judge-proxy/openai_route.py`. Segment suffixes, not string suffixes:
+`` `route.py` `` does not resolve against `openai_route.py`. Adding the third
+way took this repository from 142 findings to 21. What remains is the rule's
+premise rather than its resolution: a backticked name in prose is read as a
+claim that a file exists, so placeholders and files the tool creates in someone
+else's project still report. Waive those.
+
 `verbose-comments` is advisory rather than blocking, because its verdict comes
 from an LLM and that verdict was measured. Over three runs against the 97
 ambiguous spans left after `comment-banners` takes the easy ones, the judge
