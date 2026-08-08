@@ -28,6 +28,10 @@ Restart Claude Code afterwards; hooks load at session start.
 |--------|--------------|
 | [creed](creed/) | Keeps a working discipline present and enforced: injects a compressed operating core every prompt (and after context compaction), gates done/fixed/passing claims that ran no command, and blocks git commands that stage secret-shaped files. |
 
+**hoolint** moved to its own repository: <https://gitlab.com/packetwise/hoolint>.
+Install it from there with `/plugin marketplace add https://gitlab.com/packetwise/hoolint.git`.
+`tools/judge-proxy` stayed here; it exercises hoolint's `local_llm` stage.
+
 ## Enable / disable
 
 ```sh

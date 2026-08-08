@@ -1,8 +1,0 @@
-{
-  "name": "hoolint",
-  "version": "0.1.0",
-  "description": "Stop-hook checks for code and docs: regex, semantic, local LLM, and in-session judgment tiers with committed waivers.",
-  "author": {
-    "name": "cgiovanni"
-  }
-}

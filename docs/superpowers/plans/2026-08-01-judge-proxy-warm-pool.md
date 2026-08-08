@@ -919,7 +919,7 @@ After Task 7, the whole change is verified by:
 
 ```bash
 cd tools/judge-proxy && uv run pytest -v          # 13 passed
-cd ../../hoolint/app && uv run pytest -q          # 181 passed, unchanged
+cd ../../../hoolint/app && uv run pytest -q       # 181 passed, unchanged (sibling repo)
 ```
 
 The hoolint suite must be unchanged. If it moved, something in this plan touched the hoolint package, which Global Constraints forbid.
