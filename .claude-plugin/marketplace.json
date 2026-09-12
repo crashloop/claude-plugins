@@ -11,6 +11,12 @@
       "source": "./creed",
       "description": "Injects the compressed operating core every session and prompt; gates unverified completion claims.",
       "category": "productivity"
+    },
+    {
+      "name": "ask-all",
+      "source": "./ask-all",
+      "description": "Ask the user many questions at once: an in-terminal form tool (mcp__ask-all__ask) with per-option trade-offs and conditional follow-ups, plus ask-all-form, the same spec as a browser form.",
+      "category": "productivity"
     }
   ]
 }

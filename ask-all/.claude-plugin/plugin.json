@@ -1,0 +1,8 @@
+{
+  "name": "ask-all",
+  "version": "0.1.2",
+  "description": "Ask the user many questions at once: an in-terminal form tool (mcp__ask-all__ask) drawn above the prompt, plus the ask-all-form skill that serves the same question spec as a browser form for hosts without the terminal band.",
+  "author": {
+    "name": "cgiovanni"
+  }
+}
