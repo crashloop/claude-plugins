@@ -28,6 +28,7 @@ Restart Claude Code afterwards; hooks load at session start.
 |--------|--------------|
 | [creed](creed/) | Keeps a working discipline present and enforced: injects a compressed operating core every prompt (and after context compaction), gates done/fixed/passing claims that ran no command, and blocks git commands that stage secret-shaped files. |
 | [ask-all](ask-all/) | Lets the user answer many agent questions at once: a form drawn above the prompt with a trade-off per option, multi-select, and follow-ups that appear on demand, plus a browser-form fallback. For wayfinder, grilling and any skill that batches decisions. |
+| [trust-check](trust-check/) | Audits a company website from outside, the way a careful buyer would: twelve analysts check message, trust signals, reputation and name, competitors, AI involvement, trackers and malware-like code, email reachability, legal gaps and market fit, then one HTML report gives persona verdicts and issue counts by domain. |
 
 **hoolint** moved to its own repository: <https://gitlab.com/packetwise/hoolint>.
 Install it from there with `/plugin marketplace add https://gitlab.com/packetwise/hoolint.git`.

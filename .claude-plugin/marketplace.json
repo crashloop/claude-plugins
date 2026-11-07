@@ -17,6 +17,12 @@
       "source": "./ask-all",
       "description": "Ask the user many questions at once: an in-terminal form tool (mcp__ask-all__ask) with per-option trade-offs and conditional follow-ups, plus ask-all-form, the same spec as a browser form.",
       "category": "productivity"
+    },
+    {
+      "name": "trust-check",
+      "source": "./trust-check",
+      "description": "Audits a company website from outside, the way a careful buyer would, and builds one HTML report: trust signals, reputation, code safety, email reachability, legal gaps, market fit, persona verdicts and issue counts by domain.",
+      "category": "productivity"
     }
   ]
 }

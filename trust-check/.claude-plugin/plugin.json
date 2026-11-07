@@ -1,0 +1,9 @@
+{
+  "name": "trust-check",
+  "version": "0.1.0",
+  "description": "Audits a company website from outside, the way a careful buyer would: message, trust signals, reputation and name, competitor benchmark, AI involvement, code safety (trackers, spyware, malware-like code), mobile and accessibility, email reachability, legal gaps and market fit, merged by twelve analysts into one HTML report with persona verdicts and issue counts by domain.",
+  "author": {
+    "name": "cgiovanni"
+  },
+  "keywords": ["trust", "due-diligence", "vendor-vetting", "website-audit", "cro", "security"]
+}
