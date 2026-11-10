@@ -1,5 +1,5 @@
 ---
-description: Goal-driven loop that plans, implements, reviews, and tests every remaining TODO.md item, one at a time, until done.
+description: Goal-driven loop that plans, implements, reviews, and tests every open TODO.md item until done, in parallel worktrees by default.
 argument-hint: "[path/to/TODO.md] [item-id] [--light|--full] [--sequential|--parallel=N]   # defaults: ./TODO.md, all open items, parallel"
 disable-model-invocation: true
 ---
@@ -182,8 +182,9 @@ item is committed, so HEAD is the previous item's end state). This baseline isol
    explicit deferrals logged**. Check shared libs before writing custom logic
    (library-first). **Ground the plan in the real codebase before critiquing it:**
    validate every assumption the plan makes — file paths, existing patterns, API
-   contracts, serializer/endpoint shapes — against the actual code (use the
-   code-review-graph / Beacon tools), and correct any the codebase contradicts. A
+   contracts, serializer/endpoint shapes — against the actual code (a code-graph or
+   symbol-search tool if one is available, otherwise grep/read), and correct any the
+   codebase contradicts. A
    plan that cites a path, symbol, or contract that does not exist is a defect to
    fix now, not a finding to discover in review.
 2. **Critique the spec (workflow).** **Light mode:** always the in-context
@@ -244,9 +245,9 @@ item is committed, so HEAD is the previous item's end state). This baseline isol
 5. **Scoped tests + type-check per item; the full suite per batch.** Per item, what
    must be green before ✅ is: the **scoped tests** of every package the change touched
    (including sibling packages you refactored), their **type-checks**, and any
-   dependency/CI validators (`validate_deps`, YAML parse). Print the output in the
+   dependency or CI validators the project defines. Print the output in the
    transcript (the goal evaluator reads it there). The **complete suite** (every touched
-   package's whole test run, the host suites, `expo export`) runs **once per batch**:
+   package's whole test run, the host suites, any build/export step) runs **once per batch**:
    after every **3 completed items** and at the end of the loop — launched in the
    background the moment the batch's last item enters step 6, so it overlaps the next
    item's plan agent. A batch-suite failure is a stop-the-line event: fix it before the
@@ -329,8 +330,9 @@ reset); if it was cleared or achieved, re-set it per Setup step 4.
   workflow's launch once ("don't ask again") to keep the loop unattended. Workflows
   require Claude Code v2.1.154+ on a paid plan; if unavailable, fall back to
   **`compound-engineering:ce-doc-review`** (step 2) and
-  **`compound-engineering:ce-code-review`** (step 4) as in-context skills.
-- **Workflow mechanics (learned the hard way — 2026-06-14).**
+  **`compound-engineering:ce-code-review`** (step 4) as in-context skills, and if those
+  are missing too, take the Light-mode path for steps 2 and 4 and log it per item.
+- **Workflow mechanics.**
   - *Args.* Always launch by `scriptPath` with `args` and **absolute paths**; never
     edit the plugin's script files to hardcode an input.
   - *Submodule/monorepo diffs.* If the code lives in a git **submodule**, the baseline
@@ -426,14 +428,14 @@ that overlap is the point of rolling. For an item returned `done`:
    scoped tests there.
 2. **Merge the worktree branch into the main working tree — never two merges
    concurrently.** "Independent by DAG" does **not** guarantee disjoint files — two
-   unrelated items can still touch a shared registration point (e.g. the MCP-tool
-   enrollment files). On a merge **conflict**, do not force: relaunch that item's
+   unrelated items can still touch a shared registration point (a router, a plugin
+   registry, a settings list). On a merge **conflict**, do not force: relaunch that item's
    agent once against the now-updated tree (a fresh worktree), **feeding the specific
    colliding hunks back as added context** so the retry resolves the real conflict
    rather than re-deriving it blind; if it conflicts again, mark it 🚧.
 3. **Cheap compile gate, scoped tests, then commit.** Run the fast type-check /
-   compile for the merged item's touched packages (`tsc --noEmit` / the package's
-   syncdb check) to catch cross-item breakage — stale imports, type mismatches at a
+   compile for the merged item's touched packages (e.g. `tsc --noEmit`, `mypy`,
+   `cargo check`) to catch cross-item breakage — stale imports, type mismatches at a
    shared registration point — at the lowest cost. If it breaks, fix it (or revert
    this item's merge and relaunch its agent with the failure as added context). Then
    run the merged item's **scoped tests** (per step 5 above), print output, commit
