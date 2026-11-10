@@ -1,6 +1,6 @@
 ---
 description: Estimate the branches, worktrees and wall-clock time /todo-loop:work needs for the open TODO.md items.
-argument-hint: "[path/to/TODO.md] [--parallel=N|--sequential]   # defaults: ./TODO.md, N = max(1, min(8, cores-2))"
+argument-hint: "[path/to/TODO.md] [--parallel=N|--sequential] [--light]   # defaults: ./TODO.md, N = max(1, min(8, cores-2))"
 ---
 
 # Estimate the remaining backlog
@@ -12,13 +12,13 @@ came from.
 
 `$ARGUMENTS`: arg 1 is the backlog path (default `./TODO.md`). `--parallel=N` or
 `--sequential` mirror the `work` flags; the default is parallel with
-N = `max(1, min(8, cores−2))` (`nproc`).
+N = `max(1, min(8, cores−2))` (`nproc`, or `sysctl -n hw.ncpu` on macOS).
 
 ## Steps
 
-1. Read `${CLAUDE_PLUGIN_ROOT}/references/item-contract.md` for the item shape, status
-   markers and sizes. Parse the backlog the way `/todo-loop:check` does: level-2 work
-   headings are items; skip done, deferred and blocked items, and list blocked ones.
+1. Read `${CLAUDE_PLUGIN_ROOT}/references/item-contract.md`. Find items, status and
+   dependencies exactly as its § Finding items defines; skip done, deferred and blocked
+   items, and list blocked ones.
 2. **Size each open item.** Use its `Size:` line. Missing: infer S/M/L from the contract's
    sizing table by counting the files, packages and endpoints it references, and mark the
    size *inferred*.
@@ -27,9 +27,10 @@ N = `max(1, min(8, cores−2))` (`nproc`).
    path** (the longest chain by estimated time), and the **max width** (the largest
    wave). A cycle → report it and estimate the acyclic part only.
 4. **Calibrate durations from history, not guesses.** In the repo, collect previous runs:
-   `git log --format='%at %s' | rg ' loop: \d+ '` gives one commit per finished item.
-   For each `docs/plans/*-todo-loop/LOOP_STATE.md`, take its mode (light/full,
-   sequential/parallel). In sequential runs, the gap between consecutive item commits is
+   `git log --format='%at %s' | grep -E ' ?loop: \S+ '` gives one commit per finished item.
+   For each `docs/plans/*-todo-loop/LOOP_STATE.md`, read its `Mode:` (light when present)
+   and `Scheduling:` (sequential, or parallel N) lines; older files may phrase them
+   loosely. In sequential runs, the gap between consecutive item commits is
    that item's duration; drop gaps over 4 h as idle time. Match items to their size via
    the run's report files or the old TODO.md entry when you can. Use the **median per
    size** (or the overall median if sizes cannot be matched) and report the sample count.
@@ -55,7 +56,7 @@ N = `max(1, min(8, cores−2))` (`nproc`).
 
 ```
 Open 12 · blocked 1 · waves 4 · critical path #3 → #7 → #11 (3 items)
-Branches 12 · worktrees peak 6 (N=10, width 6)
+Branches 12 · worktrees peak 6 (N=8, width 6)
 Sequential ≈ 9 h 10 min · parallel ≈ 3 h 40 min (critical path floor 2 h 50 min)
 Calibration: 14 past items, median S 18 min / M 41 min / L 1 h 35 min
 At risk: #5 (C4 open choice), #9 (C2 broken ref)

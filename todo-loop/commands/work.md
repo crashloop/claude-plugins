@@ -55,12 +55,16 @@ command.**
 
 ## Setup (once per run)
 
-1. Read the backlog file and extract the remaining (not-done) items, in order.
+1. Read the backlog and `${CLAUDE_PLUGIN_ROOT}/references/item-contract.md`. Find the
+   items, their status and their dependencies exactly as the contract's § Finding items
+   defines. Target the open items in order; skip done, deferred and BLOCKED ones and list
+   them. Give agents the item text plus any `Context:` section it links. With arg 2, an
+   open dependency of that item is a Blocked halt (`#7 needs #3`), never a silent skip.
    **Require a clean tree:** if `git status --porcelain` is non-empty, stop and ask the
    user to commit or stash first. Every item baselines on `HEAD` and commits with
    `git add -A`, which is only safe when the tree holds nothing but loop work.
-2. Read `CLAUDE.md` (never `AGENTS.md`/`GEMINI.md`/`QODER.md` — byte-identical copies)
-   and any `agent-os/standards/`; read `docs/conventions.md` only for the rules that
+2. Read `CLAUDE.md` (or `AGENTS.md` when there is no `CLAUDE.md`) and any
+   `agent-os/standards/`; read `docs/conventions.md` only for the rules that
    touch the item's packages (grep `rule #N` mentions, don't read it whole). Background
    item agents get `CLAUDE.md` injected automatically — do not tell them to re-read
    it; name the specific conventions they need. Every decision matches the project's
@@ -76,10 +80,13 @@ command.**
    | …   | …    | ⬜      | [NN-slug.md](NN-slug.md) |
 
    Legend: ⬜ pending · 🔜 in progress · 🔬 in review · ✅ done · 🚧 blocked.
-   Under `--light`, write `Mode: light` above the table. On resume, that line keeps
-   light mode on even if the flag was not re-passed; `--full` deletes the line.
-   If `LOOP_STATE.md` already exists, **resume**: pick the first non-✅ row and
-   restart at its first unchecked checklist box (see Resume protocol).
+   Above the table write `Scheduling: sequential` or `Scheduling: parallel <N>`, and under
+   `--light` also `Mode: light`. On resume, that line keeps light mode on even if the
+   flag was not re-passed; `--full` deletes the line. **Resume first:** if any
+   `docs/plans/*-todo-loop/LOOP_STATE.md` has non-✅ rows, resume the newest such workspace
+   (whatever its date) at its first non-✅ row's first unchecked checklist box (see
+   Resume protocol) instead of seeding a new one. A second run on one day gets a
+   `-b`, `-c` suffix.
 4. **Set the goal** that drives the loop. The evaluator cannot read files or run
    commands — it only judges what you surface in the transcript — so the condition
    requires you to *echo fresh proof in the current turn*. Substitute the real
@@ -87,7 +94,7 @@ command.**
    arg-2 row):
 
    ```
-   /goal DONE when every TARGETED row in <workspace>/LOOP_STATE.md is ✅ and TODO.md
+   /goal DONE when every TARGETED row in <workspace>/LOOP_STATE.md is ✅ and <backlog>
    marks those items done, with each item's scoped tests + type-checks shown green
    in THIS turn's output, the full suite shown green once at the end of the loop, and
    its acceptance criteria demonstrated; OR HALT when a targeted
@@ -150,7 +157,7 @@ Read the report file for detail; never ask an agent to replay its working contex
 `status: blocked` → invoke the Blocked protocol, do not re-derive the work inline.
 
 If the orchestrator's own window still fills (long review payloads, a failing suite), the
-escape hatch is one `claude -p "/todo-loop:work <backlog> --sequential"` process **per item**
+escape hatch is one `claude -p "/todo-loop:work <backlog> <item-id> --sequential"` process **per item**
 driven from a shell loop — a fresh process is the only true reset. That run is fully
 unattended, so resolve every open decision first: a Blocked halt has no one to answer it.
 
@@ -247,8 +254,8 @@ item is committed, so HEAD is the previous item's end state). This baseline isol
    `systematic-debugging`**; fix root causes, not symptoms. Items in a red batch stay ✅
    only after the batch suite is green again.
 6. **Record.** Update the item's report (progress log, shipped vs deferred) and the
-   central **`TODO.md`** (mark the item done with shipped/deferred notes). Update
-   the item's row in `LOOP_STATE.md`.
+   backlog: append exactly `✅ DONE (YYYY-MM-DD)` to the item's heading and add a short
+   shipped/deferred note under it. Update the item's row in `LOOP_STATE.md`.
 7. **Capture emergent rules.** If a reusable rule, convention, or process
    improvement emerged, append it as the next numbered rule in **`docs/conventions.md`**
    (concise, active voice, Strunk) — not in `CLAUDE.md`, which every agent turn pays
@@ -310,9 +317,11 @@ reset); if it was cleared or achieved, re-set it per Setup step 4.
 - **Decide, then log.** Make sensible calls per project principles; record them.
 - **Blocked protocol.** If an item is genuinely ambiguous or blocked on a human
   decision (including a workflow `openQuestions` entry), do **not** guess and do
-  **not** silently spin: mark its row 🚧 in `LOOP_STATE.md`, state the exact
-  decision you need in this turn's output, and let the goal's **OR HALT** clause end
-  the loop. Resume the item once the user answers.
+  **not** silently spin: mark its row 🚧 in `LOOP_STATE.md`, add a
+  `**BLOCKED:** <decision needed>` line under the item's heading in the backlog, state
+  the exact decision you need in this turn's output, and let the goal's **OR HALT** clause end
+  the loop. Once the user answers, record the decision in the item, remove the BLOCKED
+  line, and resume.
 - **Workflows are review-only here.** `todo-spec-critique` and `todo-code-review`
   run their agents as the read-only **`Explore`** agent type (no Edit/Write — they
   critique and report; you apply fixes interactively). They inherit your tool
@@ -374,11 +383,9 @@ with still-running implementations instead of following them.
 After Setup, before running anything:
 
 - **Targeted items** = the not-done rows you would otherwise run (all, or the arg-2 one).
-- **Edges:** an item declares dependencies with an explicit `Depends on: #a, #b`
-  (or `depends-on:`) line in its TODO.md body — this line is the **only** source of
-  truth for edges. Declaration order and incidental `#N` mentions in prose ("shipped
-  with #30") are **not** dependencies. An edge counts only when its target is itself a
-  targeted not-done item; deps already ✅ are satisfied and dropped.
+- **Edges:** only `Depends on:` lines, per the contract. Declaration order and `#N`
+  mentions in prose ("shipped with #30") are **not** dependencies. Deps already done are
+  satisfied and dropped; a dep on an open item outside the targets is a blocker.
 - **Ready** = a targeted ⬜ item whose declared deps are all ✅ (i.e. merged into the
   main tree — 🔜/🔬 does not satisfy a dep). No dependency declarations → every
   targeted item is ready at start.

@@ -21,8 +21,8 @@ backlog (default `./TODO.md`; create it with a `# TODO` title if absent).
    highest existing id, the item heading style, any `## Shared context` sections, and the
    open items (to avoid duplicates and to wire dependencies).
 3. **Ground the plan in the repo.** For every file, symbol, endpoint, package and command
-   the plan names, confirm it exists (`ls`, `rg`, `git ls-files`) and record the exact
-   `path:line`. Note new files the plan creates as new. When the plan says "the X
+   the plan names, confirm it exists (Grep and Glob tools, `git ls-files`) and record the exact
+   `path:line`. Mark each file the plan creates with the literal `(new)` after its path. When the plan says "the X
    module" without a path, find it. When the plan is wrong about the repo, the repo
    wins: record the correction in the item's Decisions. If the plan spans more than about
    six areas, ground the areas in parallel background `Explore` agents, each returning
@@ -44,12 +44,13 @@ backlog (default `./TODO.md`; create it with a `# TODO` title if absent).
    the goal; references with `path:line` and a "why" each, including the plan section it
    came from (`<plan path>` § "<heading>"); decisions with reasons; In/Out scope; a
    `- [ ] Verified:` line with a runnable command and expected result; `Size:`. Background
-   shared by three or more items goes once into a `## Shared context: <slug>` section
+   shared by three or more items goes once into a `Shared context: <slug>` section
    placed above them, linked from each item's `Context:` line. Append under a
-   `## <plan title> (added YYYY-MM-DD)` divider.
-7. **Self-check.** Grade the new items against the rubric exactly as
+   `<plan title> (added YYYY-MM-DD)` divider heading with no id, so no command reads it
+   as an item. Match the backlog's existing item heading level (`##` when it has none).
+7. **Self-check.** Grade the new open items against the rubric exactly as
    `/todo-loop:check` would, re-running the C2 reference checks against the repo. Fix
-   every fail and rerun; do not finish with a fail.
+   every fail and rerun; do not finish with a fail. BLOCKED items are not graded.
 
 ## Output
 

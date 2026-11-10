@@ -33,21 +33,34 @@ it does not revisit them.
 - [ ] Verified: <observable behavior> — `<command>` shows <expected result>
 ```
 
-## Status markers (in the heading)
+## Finding items
+
+Every command parses the backlog the same way:
+
+- **An item is any heading, at any level, whose first token is an id:** `#12`, `12.`,
+  `P0-1`. Headings without an id (sections, shared context, plan dividers) are not items,
+  but their text is context for the items beneath them.
+- **A parent section marks its children.** Items under a heading whose title starts with
+  Done, Completed, Deferred, Declined or Won't count with that status.
+- **Dependencies** are only `Depends on: #a, #b` lines (case-insensitive, `depends-on:`
+  too). An id mentioned in prose is not a dependency.
+- New items get integer ids continuing from the highest existing number. Ids are never
+  reused. Existing non-integer ids (`P0-1`) are kept as they are.
+
+## Status markers
 
 | Marker | Meaning |
 |--------|---------|
 | none | open |
-| `✅ DONE (YYYY-MM-DD)` | done; skipped by every command |
-| a `**DEFERRED (date, reason).**` line under the heading | out of scope; skipped |
-| a `**BLOCKED:** <question>` line under the heading | needs a human answer first |
-
-Ids are unique integers, never reused. New items continue from the highest existing id.
+| `✅` anywhere in the heading (`✅ DONE (2026-11-08)`, `✅ done`) | done; skipped by every command. Write it as `✅ DONE (YYYY-MM-DD)` |
+| a `**DEFERRED (date, reason).**` line directly under the heading | out of scope; skipped |
+| a `**BLOCKED:** <question>` line directly under the heading | needs a human answer; skipped until the line is removed |
 
 ## Rubric
 
 `check` grades each criterion **pass / warn / fail**. An item is **ready** when it has no
-fail. `convert-plan` must not emit an item with a fail.
+fail; warns are advice, not gates. Blocked, deferred and done items are not graded.
+`convert-plan` must not emit an open item with a fail.
 
 | # | Criterion | Fail when |
 |---|-----------|-----------|
@@ -57,7 +70,7 @@ fail. `convert-plan` must not emit an item with a fail.
 | C4 | **Decisions made** | the item contains an open choice ("X or Y", "TBD", "decide", "maybe", "?") with no decision, or a choice that changes behavior is left implicit |
 | C5 | **Scope bounded** | no In/Out, or In is unbounded ("refactor as needed", "clean up") |
 | C6 | **Verifiable** | no `- [ ] Verified:` line, or it names no runnable command or observable result |
-| C7 | **Dependencies sound** | `Depends on:` cites a missing id, forms a cycle, or the item plainly needs another open item's output without declaring it |
+| C7 | **Dependencies sound** | a `Depends on:` line cites a missing id, forms a cycle, or the item plainly needs another open item's output without declaring it |
 | C8 | **Sized** | no `Size:`, or the work spans more than one cohesive change (split it) |
 
 Warn when a criterion is met but thin: a reference with no "why", a verify step that is
