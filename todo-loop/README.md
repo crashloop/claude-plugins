@@ -59,8 +59,8 @@ through `/loop` dynamic mode.
   test-driven-development, receiving-code-review, systematic-debugging,
   verification-before-completion). Missing skills are applied inline.
 - Optional: **compound-engineering** (`ce-doc-review`, `ce-code-review` fallbacks when
-  workflows are unavailable; `ce-compound` for step 7 learnings). With neither workflows
-  nor these, steps 2 and 4 take the light path.
+  workflows are unavailable). With neither workflows nor these, steps 2 and 4 take the
+  light path.
 - Optional: **ask-all**, so `convert-plan` asks its questions as one form; otherwise it
   uses `AskUserQuestion`.
 - `work` needs a clean git tree to start.

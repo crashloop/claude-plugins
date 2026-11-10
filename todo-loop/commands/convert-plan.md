@@ -40,12 +40,10 @@ backlog (default `./TODO.md`; create it with a `# TODO` title if absent).
    No way to ask (non-interactive run): decide internal details yourself (placement,
    naming, helper shape) with a logged reason, but write a `**BLOCKED:**` line for any
    choice that changes observable behavior, data or an external contract.
-6. **Write the items.** Use ids from highest + 1, in dependency order. Each item gets:
-   the goal; references with `path:line` and a "why" each, including the plan section it
-   came from (`<plan path>` § "<heading>"); decisions with reasons; In/Out scope; a
-   `- [ ] Verified:` line with a runnable command and expected result; `Size:`. Background
-   shared by three or more items goes once into a `Shared context: <slug>` section
-   placed above them, linked from each item's `Context:` line. Append under a
+6. **Write the items** in the contract's § Shape, ids from highest + 1, in dependency
+   order. Each item's References include the plan section it came from
+   (`<plan path>` § "<heading>"). Follow the contract's § DRY for shared background.
+   Append under a
    `<plan title> (added YYYY-MM-DD)` divider heading with no id, so no command reads it
    as an item. Match the backlog's existing item heading level (`##` when it has none).
 7. **Self-check.** Grade the new open items against the rubric exactly as
