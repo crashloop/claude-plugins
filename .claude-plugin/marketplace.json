@@ -23,6 +23,12 @@
       "source": "./trust-check",
       "description": "Audits a company website from outside, the way a careful buyer would, and builds one HTML report: trust signals, reputation, code safety, email reachability, legal gaps, market fit, persona verdicts and issue counts by domain.",
       "category": "productivity"
+    },
+    {
+      "name": "todo-loop",
+      "source": "./todo-loop",
+      "description": "Goal-driven loop that plans, critiques, implements (TDD), reviews and tests every remaining TODO.md item until done.",
+      "category": "productivity"
     }
   ]
 }

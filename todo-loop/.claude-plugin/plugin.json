@@ -1,0 +1,9 @@
+{
+  "name": "todo-loop",
+  "version": "0.1.0",
+  "description": "Goal-driven loop that plans, critiques, implements (TDD), reviews and tests every remaining TODO.md item until done, with two background review workflows that adversarially verify each finding.",
+  "author": {
+    "name": "cgiovanni"
+  },
+  "keywords": ["todo", "backlog", "tdd", "code-review", "workflow", "goal"]
+}
