@@ -1,6 +1,7 @@
 ---
 description: Goal-driven loop that plans, implements, reviews, and tests every remaining TODO.md item, one at a time, until done.
-argument-hint: "[path/to/TODO.md] [item-id] [--light|--full]   # defaults: ./TODO.md, all non-done items"
+argument-hint: "[path/to/TODO.md] [item-id] [--light|--full] [--sequential|--parallel=N]   # defaults: ./TODO.md, all open items, parallel"
+disable-model-invocation: true
 ---
 
 # TODO Loop — goal-driven, self-verifying delivery of the backlog
@@ -55,6 +56,9 @@ command.**
 ## Setup (once per run)
 
 1. Read the backlog file and extract the remaining (not-done) items, in order.
+   **Require a clean tree:** if `git status --porcelain` is non-empty, stop and ask the
+   user to commit or stash first. Every item baselines on `HEAD` and commits with
+   `git add -A`, which is only safe when the tree holds nothing but loop work.
 2. Read `CLAUDE.md` (never `AGENTS.md`/`GEMINI.md`/`QODER.md` — byte-identical copies)
    and any `agent-os/standards/`; read `docs/conventions.md` only for the rules that
    touch the item's packages (grep `rule #N` mentions, don't read it whole). Background
@@ -154,9 +158,9 @@ unattended, so resolve every open decision first: a Blocked halt has no one to a
 
 Do **one** item start-to-finish before touching the next. When you start: mark the
 row 🔜 in `LOOP_STATE.md`, and **capture the item's review baseline** — run
-`git rev-parse HEAD` and record the sha (each finished item is committed, so
-HEAD is the previous item's end state; if the tree is dirty for another reason, use
-`git stash create` instead). This baseline isolates *this* item's diff in step 4.
+`git rev-parse HEAD` and record the sha (the tree was clean at Setup and each finished
+item is committed, so HEAD is the previous item's end state). This baseline isolates
+*this* item's diff in step 4.
 
 1. **Plan the spec.** Run this step in a **per-item background agent** (see Context
    isolation) so the grounding reads never enter your window; it writes the report file
@@ -183,11 +187,9 @@ HEAD is the previous item's end state; if the tree is dirty for another reason, 
    and contract the plan cites resolves in the real code.
    Otherwise launch the **`todo-spec-critique`** dynamic
    workflow on the report with **absolute paths** (`planPath`, `item`, `principleFiles`).
-   `args` may not bind (see Workflow mechanics), so the reliable launch is a
-   **`scriptPath`** copy whose fallbacks are hardcoded to this item; a named launch with
-   `args` works only where the defaults would also be correct. Pass `lenses` scoped to the item (e.g. drop `frontend-ssot`
-   for backend-only items, `domain` for items touching no domain non-negotiable;
-   omit for all lenses). **While the workflow runs, do read-only prep** — read the
+   Pass `lenses` scoped to the item (e.g. add the opt-in `frontend-ssot` for frontend
+   items in a monorepo, drop `domain` for items touching no domain non-negotiable;
+   omit for the default set). **While the workflow runs, do read-only prep** — read the
    code paths the plan touches and identify step 3's scoped tests; write no code
    yet. Then **wait for its completion notification and read the returned
    result** — the workflow runs in the background and does not block your turn on
@@ -213,9 +215,7 @@ HEAD is the previous item's end state; if the tree is dirty for another reason, 
    your window). Verify each blocker/major finding against the real code before fixing
    it; drop nits. Otherwise launch the **`todo-code-review`**
    dynamic workflow on *this item's* diff with `item`, `baseline` (the item's sha),
-   `repoDir` and `principleFiles`, all **absolute**. As in step 2, the reliable launch is
-   a **`scriptPath`** copy with these hardcoded: a dropped `args` falls back to
-   `repoDir: '.'`, which is wrong whenever the code is not in the cwd's repo. Pass
+   `repoDir` and `principleFiles`, all **absolute**. Pass
    `personas` scoped to the
    diff (e.g. `["correctness", "simplicity", "tests"]` for a small single-package
    change; omit for all six). **The moment it is launched, run step 5's scoped tests
@@ -262,10 +262,8 @@ HEAD is the previous item's end state; if the tree is dirty for another reason, 
    Evidence before assertions — never claim done without showing the output.
    Then **commit the item** on the current branch — `git add -A && git commit -m
    "loop: NN <slug>"` (a submodule change is committed inside the submodule first,
-   then the pointer bump in the host). Do not push after every commit. When another
-   targeted item depends on this one (`Depends on:`), publish it before that item forks:
-   push its branch, or merge it into the default branch and push (submodule first, then
-   the host), so a fresh worktree starts from code that includes it. Never force-push.
+   then the pointer bump in the host). **Never push**: worktrees fork from the local
+   merged state, so dependents already see this commit. Pushing is the user's call.
 
 ## Light mode
 
@@ -324,12 +322,8 @@ reset); if it was cleared or achieved, re-set it per Setup step 4.
   **`compound-engineering:ce-doc-review`** (step 2) and
   **`compound-engineering:ce-code-review`** (step 4) as in-context skills.
 - **Workflow mechanics (learned the hard way — 2026-06-14).**
-  - *Args may not bind.* On some launch paths a named-workflow launch reaches the
-    script with `args` undefined, so the workflow runs on its defaults. The skill
-    sources degrade gracefully (auto-locate the in-progress plan / review the working
-    tree), but to target a specific input reliably: launch once, then **edit the
-    persisted `scriptPath`'s hardcoded fallbacks** (the tool result prints the path)
-    and re-invoke with `{scriptPath}`. Pass **absolute paths** so cwd doesn't matter.
+  - *Args.* Always launch by `scriptPath` with `args` and **absolute paths**; never
+    edit the plugin's script files to hardcode an input.
   - *Submodule/monorepo diffs.* If the code lives in a git **submodule**, the baseline
     is a submodule commit — pass `repoDir` to `todo-code-review` (or hardcode it) so the
     diff runs with `git -C <submodule>`, never in the superrepo. Capture the item
@@ -340,13 +334,16 @@ reset); if it was cleared or achieved, re-set it per Setup step 4.
     failed, read its task status/output — it may have **succeeded on defaults**;
     relaunching duplicates the run (and the cost). `TaskStop` any redundant run.
   - *Reading results.* The completion notification is **truncated**; the full payload is
-    the task `output-file` (JSON, nested under `result` — `result.revision.mustFix`,
-    `result.findings`). Always read the file, never act on the truncated summary alone.
-- **Commit each finished item; publish it when others depend on it.** Step 8 ends with
-  one commit on the current branch (`loop: NN <slug>`), so the tree is clean at every item
-  boundary and parallel mode can fork worktrees from it. An item with dependents is pushed,
-  or merged into the default branch and pushed, before they launch. Never force-push. Finish the
-  loop with a summary of what shipped, what deferred, and any new `CLAUDE.md` rules.
+    the task `output-file` (JSON, nested under `result`). Always read the file, never act
+    on the truncated summary alone. Spec critique: apply `result.revision.mustFix`.
+    Code review: apply `result.summary.fixes` (deduplicated; `result.findings` is the raw
+    set). Check `result.failedLenses` / `result.failedPersonas`: those dimensions went
+    **unreviewed**, so relaunch with just them once. Verify each `result.unverified`
+    finding yourself. A workflow that throws reviewed nothing: relaunch once, then Blocked.
+- **Commit each finished item, never push.** Step 8 ends with one local commit
+  (`loop: NN <slug>`), so the tree is clean at every item boundary and parallel mode can
+  fork worktrees from it. Finish the loop with a summary of what shipped, what deferred,
+  and any new `docs/conventions.md` rules.
 - **No scope creep.** Build what the item asks for; defer extras with a logged note.
 
 ## Parallel mode — rolling, dependency-aware (DEFAULT; opt out via `--sequential`)
@@ -355,10 +352,8 @@ Parallel is the default: independent items run **concurrently**, in dependency
 order, each in its own git worktree. `--sequential` restores the strictly serial,
 shared-tree cycle. Everything above still holds *within* an item; this section only
 changes how items are **scheduled** and **isolated**. Worktrees fork from HEAD, so
-**uncommitted work in the main tree is invisible to item agents** — since every
-finished item is committed, the tree is clean at item boundaries; if it is dirty at
-run start for another reason, surface that and fall back to sequential rather than
-fork a stale baseline.
+**uncommitted work in the main tree is invisible to item agents**. Setup requires a clean
+tree and every finished item is committed, so the tree is clean at item boundaries.
 
 **Safety model shift.** A worktree item-agent takes **no mid-run input**: "stop and
 ask when blocked" becomes "return the blocker as a finding for the orchestrator."
@@ -453,7 +448,7 @@ unchanged; the run ends when no items are in flight and none are ready.
 | --- | --- | --- |
 | Items in flight | 1 | up to `N`, topped up per completion |
 | Context isolation | two background agents per item (plan, implement) | one background agent per item (whole cycle) |
-| Edit isolation | shared tree + stash baseline | one git worktree per item |
+| Edit isolation | shared tree + HEAD baseline | one git worktree per item |
 | Fork point | n/a (shared tree) | latest merged state at launch |
 | Spec critique | `todo-spec-critique` workflow | in-agent self-critique |
 | Verified diff review | `todo-code-review` per item | `todo-code-review` per item, **post-item, overlapped** |

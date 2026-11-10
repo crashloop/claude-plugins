@@ -11,7 +11,8 @@ export const meta = {
 }
 
 // args: { scope?: string, baseline?: string, item?: string, principleFiles?: string[], repoDir?: string,
-//         personas?: string[] }  // subset of persona keys to run (default: all six)
+//         personas?: string[],  // subset of persona keys to run (default: all six)
+//         maxFindings?: number } // per-persona cap on findings sent to verifiers (default 5)
 // baseline = a git ref/sha captured before this item started (e.g. from `git stash create`),
 // so the review sees ONLY this item's diff and not prior uncommitted items.
 // repoDir = the repo the code actually lives in. For a monorepo whose code sits in a git
@@ -20,16 +21,20 @@ export const meta = {
 const repoDir = (args && args.repoDir) || '.'
 const gitC = repoDir === '.' ? 'git' : `git -C "${repoDir}"`
 const baseline = (args && args.baseline) || ''
+if (args && !baseline) log('no baseline passed: reviewing the whole working tree against HEAD')
 const scope = (args && args.scope) ||
   (baseline
     ? `this item's change ONLY, in the repo at ${repoDir} (use absolute paths under it for every file read). ` +
       `Run \`${gitC} --no-pager diff ${baseline}\` for modified tracked files. CRITICAL: a NEW package is almost ` +
-      `entirely UNTRACKED, so a diff alone shows nothing — you MUST also run \`${gitC} status --porcelain\` and ` +
+      `entirely UNTRACKED, so a diff alone shows nothing — you MUST also run ` +
+      `\`${gitC} status --porcelain --untracked-files=all\` and ` +
       `READ every new/untracked file added since the baseline. Review both.`
     : `the working-tree change in the repo at ${repoDir}: run \`${gitC} --no-pager diff HEAD\` AND ` +
-      `\`${gitC} status --porcelain\`, then READ new/untracked files (a new package appears only as untracked).`)
+      `\`${gitC} status --porcelain --untracked-files=all\`, then READ new/untracked files ` +
+      `(a new package appears only as untracked).`)
 const item = (args && args.item) || 'the in-progress change (identify it from the diff/status)'
-const principleFiles = (args && args.principleFiles) || ['CLAUDE.md']
+const principleFiles = (args && args.principleFiles) ||
+  ['CLAUDE.md (or AGENTS.md when CLAUDE.md is absent)', '~/.claude/CLAUDE.md if it exists']
 // Reviewers run as Explore agents (no CLAUDE.md injection), so they read the principle files
 // themselves; project conventions (docs/conventions.md when present) are consulted per persona,
 // not read whole — that file is the bulk of the old payload.
@@ -46,6 +51,8 @@ const ALL_PERSONAS = [
   { key: 'tests', focus: 'asserts behaviour not implementation, stable testIDs/data-testids preserved, the change is actually covered, no fragile CSS/structure assertions, scoped tests exist for changed units' },
 ]
 const PERSONAS = personaKeys ? ALL_PERSONAS.filter(p => personaKeys.includes(p.key)) : ALL_PERSONAS
+const unknownPersonas = (personaKeys || []).filter(k => !ALL_PERSONAS.some(p => p.key === k))
+if (unknownPersonas.length) log(`ignoring unknown personas: ${unknownPersonas.join(', ')}`)
 if (!PERSONAS.length) throw new Error(`no personas match ${JSON.stringify(personaKeys)}; valid: ${ALL_PERSONAS.map(p => p.key).join(', ')}`)
 
 const FINDINGS_SCHEMA = {
@@ -59,7 +66,7 @@ const FINDINGS_SCHEMA = {
         additionalProperties: false,
         properties: {
           severity: { type: 'string', enum: ['blocker', 'major', 'minor', 'nit'] },
-          location: { type: 'string', description: 'file:line of the problem' },
+          location: { type: 'string', description: 'absolute/path/to/file:line of the problem' },
           title: { type: 'string' },
           detail: { type: 'string', description: 'what is wrong and why' },
           fix: { type: 'string', description: 'concrete change to make' },
@@ -105,6 +112,8 @@ const SUMMARY_SCHEMA = {
   required: ['blockers', 'fixes'],
 }
 
+// A reviewer that dies returns null. Record it so a failed review never reads as a clean one.
+const failedPersonas = []
 // Pipeline: each persona's findings are verified as soon as that persona finishes —
 // no barrier, so a slow dimension never blocks verification of a fast one.
 const reviewed = await pipeline(
@@ -115,7 +124,8 @@ const reviewed = await pipeline(
       `grep it for the rules relevant to this dimension instead of reading it whole.\n` +
       `Review ${scope}.\n` +
       `Focus exclusively on: ${persona.focus}.\n` +
-      `Report only real, actionable findings, each with an exact file:line. Do NOT edit any file.\n` +
+      `Report only real, actionable findings, each with an exact ABSOLUTE file path and line. ` +
+      `Do NOT edit any file.\n` +
       `If nothing is wrong on this dimension, return an empty findings array.`,
     { label: `review:${persona.key}`, phase: 'Review', schema: FINDINGS_SCHEMA, agentType: 'Explore',
       model: 'sonnet', effort: 'medium' },
@@ -123,7 +133,8 @@ const reviewed = await pipeline(
   // Cap the verify fan-out: nits are never worth a verifier, and a chatty persona is bounded
   // to its top-N by severity. Dropped findings are logged, never silently lost.
   (review, persona) => {
-    const all = (review && review.findings ? review.findings : [])
+    if (!review) { failedPersonas.push(persona.key); return [] }
+    const all = review.findings || []
     const kept = all
       .filter(f => f.severity !== 'nit')
       .sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity])
@@ -132,18 +143,23 @@ const reviewed = await pipeline(
     return parallel(kept.map(f => () =>
     agent(
       `Adversarially verify a ${persona.key} review finding. Default to confirmed=false unless you can ` +
-        `confirm it against the actual code. Read the cited location and surrounding context before deciding.\n` +
+        `confirm it against the actual code in the repo at ${repoDir} (resolve relative paths there, never ` +
+        `against your cwd). Read the cited location and surrounding context before deciding.\n` +
         `Location: ${f.location}\nTitle: ${f.title}\nClaim: ${f.detail}\nProposed fix: ${f.fix}`,
-      { label: `verify:${f.location}`, phase: 'Verify', schema: VERDICT_SCHEMA, agentType: 'Explore', effort: 'low' },
+      { label: `verify:${f.location}`, phase: 'Verify', schema: VERDICT_SCHEMA, agentType: 'Explore',
+        model: 'sonnet', effort: 'low' },
     ).then(v => ({ ...f, persona: persona.key, verdict: v })),
   ))
   },
 )
 
-const confirmed = reviewed
-  .flat()
-  .filter(Boolean)
-  .filter(f => f.verdict && f.verdict.confirmed)
+if (failedPersonas.length === PERSONAS.length) {
+  throw new Error(`every reviewer failed (${failedPersonas.join(', ')}); the change is NOT reviewed`)
+}
+const verified = reviewed.flat().filter(Boolean)
+// A verifier that died is neither confirmed nor refuted: surface it for a manual look.
+const unverified = verified.filter(f => !f.verdict)
+const confirmed = verified.filter(f => f.verdict && f.verdict.confirmed)
 
 phase('Synthesize')
 // ponytail: <=3 findings need no dedup agent — map them straight into the summary shape.
@@ -163,9 +179,12 @@ const summary = confirmed.length <= 3
       { label: 'synthesize', schema: SUMMARY_SCHEMA, effort: 'low' },
     )
 
+// summary.fixes is the deduplicated list to apply; findings is the raw confirmed set.
 return {
-  verifiedCount: reviewed.flat().filter(Boolean).length,
+  verifiedCount: verified.length - unverified.length,
   confirmedCount: confirmed.length,
+  failedPersonas,
+  unverified,
   findings: confirmed,
   summary,
 }

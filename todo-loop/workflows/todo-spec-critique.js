@@ -4,22 +4,23 @@ export const meta = {
   name: 'todo-spec-critique',
   description: 'Critique a TODO-item plan from several independent angles, then synthesize a prioritized revision list',
   phases: [
-    { title: 'Critique', detail: 'one reviewer per lens (principles, simplicity, testability, domain, gaps, grounding, frontend-ssot)' },
+    { title: 'Critique', detail: 'one reviewer per lens (principles, simplicity, testability, domain, gaps, grounding; frontend-ssot opt-in)' },
     { title: 'Synthesize', detail: 'dedup and prioritize into a single actionable revision list' },
   ],
 }
 
 // args: { planPath: string, item?: string, principleFiles?: string[],
-//         lenses?: string[] }  // subset of lens keys to run (default: all)
+//         lenses?: string[] }  // subset of lens keys to run (default: all but opt-in ones)
 // NOTE: in some launch paths `args` does not bind (e.g. a named-workflow launch),
 // so degrade gracefully instead of hard-throwing — tell the agents to locate the
 // in-progress plan themselves (the workflow script has no filesystem access; only
 // the Explore agents can read files).
 const planPath = (args && args.planPath) ||
-  'AUTO — locate the plan yourself: the newest file matching docs/plans/*-todo-loop/NN-*.md ' +
+  'AUTO — locate the plan yourself: the most recently modified file matching docs/plans/*-todo-loop/NN-*.md ' +
   'whose checklist line "2. [ ] Spec critiqued" is still UNTICKED. Read that file before critiquing.'
 const item = (args && args.item) || 'the in-progress backlog item (identify it from the plan you locate)'
-const principleFiles = (args && args.principleFiles) || ['CLAUDE.md']
+const principleFiles = (args && args.principleFiles) ||
+  ['CLAUDE.md (or AGENTS.md when CLAUDE.md is absent)', '~/.claude/CLAUDE.md if it exists']
 
 const lensKeys = (args && args.lenses) || null
 const ALL_LENSES = [
@@ -42,7 +43,7 @@ const ALL_LENSES = [
   {
     key: 'domain',
     focus: 'domain non-negotiables the project itself declares as mandatory (read CLAUDE.md and docs/conventions.md, ' +
-      'STRATEGY.md, docs/adr/ — compliance, security, and product constraints named there). ' +
+      'and any strategy or ADR docs — compliance, security, and product constraints named there). ' +
       'Flag any that the item touches but does not honor; skip if the project declares none',
   },
   {
@@ -53,7 +54,7 @@ const ALL_LENSES = [
   {
     key: 'grounding',
     focus: 'validate the plan against the ACTUAL codebase, not just internal consistency. READ the real code ' +
-      '(prefer the code-review-graph / Beacon tools; fall back to grep/read) and flag every assumption the plan ' +
+      '(use a code-graph or symbol-search tool if one is available, otherwise grep/read) and flag every assumption the plan ' +
       'makes that the codebase contradicts or does not support: cited file paths that do not exist, functions/' +
       'classes/symbols referenced that are absent or have a different signature, API/serializer/endpoint shapes ' +
       'that differ from the real server contract, existing patterns the plan misdescribes, and any existing ' +
@@ -62,6 +63,7 @@ const ALL_LENSES = [
   },
   {
     key: 'frontend-ssot',
+    optIn: true, // monorepo/frontend-specific: runs only when named in args.lenses
     focus: 'for frontend items ONLY (skip if backend-only): (1) cross-package imports of RUNTIME VALUES ' +
       '(error classes, constants) — importing a value from a package barrel that re-exports heavy UI modules ' +
       'drags the whole UI framework into the importer\'s tests and breaks them; shared runtime values must ' +
@@ -71,7 +73,9 @@ const ALL_LENSES = [
       'reuse the repo\'s shared formatters, not a second copy. (4) stable testIDs are specified for every component.',
   },
 ]
-const LENSES = lensKeys ? ALL_LENSES.filter(l => lensKeys.includes(l.key)) : ALL_LENSES
+const LENSES = lensKeys ? ALL_LENSES.filter(l => lensKeys.includes(l.key)) : ALL_LENSES.filter(l => !l.optIn)
+const unknownLenses = (lensKeys || []).filter(k => !ALL_LENSES.some(l => l.key === k))
+if (unknownLenses.length) log(`ignoring unknown lenses: ${unknownLenses.join(', ')}`)
 if (!LENSES.length) throw new Error(`no lenses match ${JSON.stringify(lensKeys)}; valid: ${ALL_LENSES.map(l => l.key).join(', ')}`)
 
 const CRITIQUE_SCHEMA = {
@@ -143,7 +147,13 @@ const critiques = await parallel(LENSES.map(lens => () =>
   ),
 ))
 
-const allFindings = critiques.filter(Boolean).flatMap(c => (c.findings || []).map(f => ({ ...f, lens: c.lens })))
+// A lens agent that dies returns null. Record it so a failed critique never reads as a clean one.
+const failedLenses = LENSES.filter((l, i) => !critiques[i]).map(l => l.key)
+if (failedLenses.length === LENSES.length) {
+  throw new Error(`every lens failed (${failedLenses.join(', ')}); the plan is NOT critiqued`)
+}
+const allFindings = critiques.flatMap((c, i) =>
+  c ? (c.findings || []).map(f => ({ ...f, lens: LENSES[i].key })) : [])
 
 phase('Synthesize')
 // ponytail: zero findings need no synthesis agent. Non-empty sets keep it — the
@@ -161,5 +171,6 @@ const revision = allFindings.length === 0
 return {
   planPath,
   totalFindings: allFindings.length,
+  failedLenses,
   revision,
 }
