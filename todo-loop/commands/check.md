@@ -28,7 +28,10 @@ check to those item ids.
 4. **Probe sufficiency (C3, C4, C9).** For each item, ask: "starting from only this item and
    the repo, where would I edit first, and which choice would I have to make up?" If the
    answer needs a search the item gives no lead for, or a choice the item leaves open,
-   that is the gap. Quote the vague phrase. **C9:** when an item leans on a plan or doc
+   that is the gap. Quote the vague phrase. Follow the change past the code to where it
+   runs: the build images, CI jobs and deploy config that build, test or ship it, and the
+   callers of every symbol it changes. A new system package, extension, service or
+   setting those places lack, and the item never names, is a C3 fail. **C9:** when an item leans on a plan or doc
    ("see the plan", "as designed in X"), open it: any decision or constraint the work
    needs that appears only there is a C9 fail. Name the fact to copy into the item.
 5. **Fan out on big backlogs.** More than 10 open items: split them into batches of about

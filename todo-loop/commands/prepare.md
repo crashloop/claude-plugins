@@ -65,15 +65,16 @@ The run has three phases: **analyze** (read-only), **ask** (once, before any wri
    Decisions with the same tag, and add a `**BLOCKED:** <question>` line under its
    heading where the chat leaves a behavior choice open or contradicts its text. Leave
    existing text in place.
-9. **Self-check** per `convert-plan` step 8, applied to new and amended items, with C9
+9. **Check and fix** per `convert-plan` step 8, on the new and amended items, with C9
    checked against the facts from step 3: none may be missing from the backlog.
 
 ## Output
 
 A table of the appended items (id, title, size, depends on, verdict), the amended items
-with what was added, the questions you asked with the answers you applied, and any
-candidates you skipped because they were already done or rejected. End with:
+with what was added, the questions you asked with the answers you applied, what each
+check-and-fix round found and changed, and any candidates you skipped because they were
+already done or rejected. End with:
 
 ```
-Next: /todo-loop:check, then /todo-loop:work
+Next: /todo-loop:work
 ```

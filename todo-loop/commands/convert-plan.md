@@ -63,17 +63,28 @@ The run has three phases: **analyze** (read-only), **ask** (once, before any wri
    shared by three or more items goes once into a shared-context section per the
    contract's § DRY. Each item also cites its plan section (`<plan path>` § "<heading>")
    for extra detail.
-8. **Self-check.** Grade the new open items against the rubric exactly as
-   `/todo-loop:check` would, re-running the C2 reference checks against the repo and the
-   C9 check against the plan. Fix every fail and rerun; do not finish with a fail.
-   BLOCKED items are not graded. A gap found here that only the user can fill becomes a
-   `**BLOCKED:**` line, not a late question.
+8. **Check and fix, in a loop.** The author's own read is anchored on what it meant to
+   write, so the grading runs in a fresh context:
+   1. Launch one background `Explore` agent that runs `${CLAUDE_PLUGIN_ROOT}/commands/check.md`
+      steps 3 and 4 on the new and amended items. Give it the contract path, the backlog
+      path and the item ids, and ask for check's output table. Build the dependency graph
+      yourself. Check C9 yourself against the plan (or the conversation): the agent
+      cannot see it.
+   2. Fix every fail, and every warn whose fix is a fact (a wrong line, a missing
+      reference, an unnamed CI job or image). A fix that needs a choice follows step 6's
+      rule for a run without the user: decide internal details with a logged reason; a
+      choice that changes behavior, data or an external contract becomes a
+      `**BLOCKED:**` line. Never ask a question here. A fix may add an item (a
+      prerequisite the gap revealed); give it the next id and a `Depends on:` edge.
+   3. Rerun the agent on the items you changed or added. Stop when no item fails, after at
+      most 3 rounds; a fail left after round 3 becomes a `**BLOCKED:**` line naming the gap.
+   BLOCKED items are not graded.
 
 ## Output
 
 A table of the appended items (id, title, size, depends on, verdict), the questions you
-asked with the answers you applied, any corrections to the plan, and plan steps you
-mapped onto existing items. End with:
+asked with the answers you applied, any corrections to the plan, plan steps you mapped
+onto existing items, and what each check-and-fix round found and changed. End with:
 
 ```
 Next: /todo-loop:estimate, then /todo-loop:work

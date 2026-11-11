@@ -17,8 +17,8 @@ On Claude Code 2.1.275+ one step works: `/plugin install todo-loop --marketplace
 
 | Command | Does |
 |---------|------|
-| `/todo-loop:prepare [TODO.md] [focus...]` | Captures the work agreed, deferred or left open in the current conversation as items, writing every chat-only decision into the backlog; asks all questions upfront |
-| `/todo-loop:convert-plan <plan.md> [TODO.md]` | Appends the plan as fresh-agent-ready items: grounded `path:line` references, decisions (asks all questions upfront, in one batch), scope, a runnable verify step, size, dependencies |
+| `/todo-loop:prepare [TODO.md] [focus...]` | Captures the work agreed, deferred or left open in the current conversation as items, writing every chat-only decision into the backlog; asks all questions upfront, then runs a check-and-fix loop until no item fails |
+| `/todo-loop:convert-plan <plan.md> [TODO.md]` | Appends the plan as fresh-agent-ready items: grounded `path:line` references, decisions (asks all questions upfront, in one batch), scope, a runnable verify step, size, dependencies; ends with the same check-and-fix loop |
 | `/todo-loop:check [TODO.md] [ids...]` | Read-only: grades each open item C1 to C9 and names the exact fix for each gap |
 | `/todo-loop:estimate [TODO.md] [--parallel=N\|--sequential]` | Read-only: branches, peak worktrees, waves, critical path, sequential vs parallel time, calibrated from past `loop:` commits |
 | `/todo-loop:work [TODO.md] [item-id] [--light\|--full] [--sequential\|--parallel=N]` | Runs the loop: commits each item locally, never pushes |
@@ -30,7 +30,7 @@ Typical flow:
 
 ```
 /todo-loop:convert-plan docs/plans/my-plan.md   # or, after a design chat: /todo-loop:prepare
-/todo-loop:check
+/todo-loop:check                                # optional: both already check and fix
 /todo-loop:estimate
 /todo-loop:work
 ```
