@@ -1,8 +1,8 @@
 # TODO.md item contract
 
-The single definition of a **fresh-agent-ready** item. `/todo-loop:convert-plan` writes
-items to it, `/todo-loop:check` grades items against it, `/todo-loop:estimate` reads its
-fields, and `/todo-loop:work` consumes it.
+The single definition of a **fresh-agent-ready** item. `/todo-loop:prepare` and
+`/todo-loop:convert-plan` write items to it, `/todo-loop:check` grades items against it,
+`/todo-loop:estimate` reads its fields, and `/todo-loop:work` consumes it.
 
 A fresh agent has `CLAUDE.md`, the repo, and this one item. Nothing else. The item must let
 it finish the work without asking a question or guessing an answer.

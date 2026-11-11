@@ -17,18 +17,19 @@ On Claude Code 2.1.275+ one step works: `/plugin install todo-loop --marketplace
 
 | Command | Does |
 |---------|------|
+| `/todo-loop:prepare [TODO.md] [focus...]` | Captures the work agreed, deferred or left open in the current conversation as items, with chat-only decisions saved to a `docs/plans/` capture file the items cite |
 | `/todo-loop:convert-plan <plan.md> [TODO.md]` | Appends the plan as fresh-agent-ready items: grounded `path:line` references, decisions (asks you open questions in one batch), scope, a runnable verify step, size, dependencies |
 | `/todo-loop:check [TODO.md] [ids...]` | Read-only: grades each open item C1 to C8 and names the exact fix for each gap |
 | `/todo-loop:estimate [TODO.md] [--parallel=N\|--sequential]` | Read-only: branches, peak worktrees, waves, critical path, sequential vs parallel time, calibrated from past `loop:` commits |
 | `/todo-loop:work [TODO.md] [item-id] [--light\|--full] [--sequential\|--parallel=N]` | Runs the loop: commits each item locally, never pushes |
 
-All four share one definition of a ready item:
+All five share one definition of a ready item:
 [`references/item-contract.md`](references/item-contract.md).
 
 Typical flow:
 
 ```
-/todo-loop:convert-plan docs/plans/my-plan.md
+/todo-loop:convert-plan docs/plans/my-plan.md   # or, after a design chat: /todo-loop:prepare
 /todo-loop:check
 /todo-loop:estimate
 /todo-loop:work
@@ -43,7 +44,7 @@ through `/loop` dynamic mode.
 | Path | Role |
 |------|------|
 | `commands/work.md` | The loop |
-| `commands/convert-plan.md`, `check.md`, `estimate.md` | Backlog prep and sizing |
+| `commands/prepare.md`, `convert-plan.md`, `check.md`, `estimate.md` | Backlog prep and sizing |
 | `references/item-contract.md` | Item shape, status markers, rubric, sizing |
 | `workflows/todo-spec-critique.js` | Step 2: multi-lens plan critique, synthesized `mustFix` list |
 | `workflows/todo-code-review.js` | Step 4: six persona reviewers, each finding adversarially verified |
@@ -61,7 +62,7 @@ through `/loop` dynamic mode.
 - Optional: **compound-engineering** (`ce-doc-review`, `ce-code-review` fallbacks when
   workflows are unavailable). With neither workflows nor these, steps 2 and 4 take the
   light path.
-- Optional: **ask-all**, so `convert-plan` asks its questions as one form; otherwise it
+- Optional: **ask-all**, so `prepare` and `convert-plan` ask their questions as one form; otherwise they
   uses `AskUserQuestion`.
 - `work` needs a clean git tree to start.
 
