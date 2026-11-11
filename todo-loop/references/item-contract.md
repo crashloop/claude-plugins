@@ -4,8 +4,9 @@ The single definition of a **fresh-agent-ready** item. `/todo-loop:prepare` and
 `/todo-loop:convert-plan` write items to it, `/todo-loop:check` grades items against it,
 `/todo-loop:estimate` reads its fields, and `/todo-loop:work` consumes it.
 
-A fresh agent has `CLAUDE.md`, the repo, and this one item. Nothing else. The item must let
-it finish the work without asking a question or guessing an answer.
+A fresh agent has `CLAUDE.md`, the repo, and this one item (plus any backlog section its
+`Context:` line links). Nothing else: no chat, and no obligation to read a plan. The item
+must let it finish the work without asking a question or guessing an answer.
 
 ## Shape
 
@@ -72,6 +73,7 @@ fail; warns are advice, not gates. Blocked, deferred and done items are not grad
 | C6 | **Verifiable** | no `- [ ] Verified:` line, or it names no runnable command or observable result |
 | C7 | **Dependencies sound** | a `Depends on:` line cites a missing id, forms a cycle, or the item plainly needs another open item's output without declaring it |
 | C8 | **Sized** | no `Size:`, or the work spans more than one cohesive change (split it) |
+| C9 | **Context in the backlog** | a fact the work depends on that the repo does not hold (a decision, its reason, a user constraint, an external contract detail, a measured finding) lives only in a plan, doc or conversation. Write it in the item or a backlog shared-context section; a link to a plan is extra detail, never the only source |
 
 Warn when a criterion is met but thin: a reference with no "why", a verify step that is
 manual only, an L item that could reasonably split.

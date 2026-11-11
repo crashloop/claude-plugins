@@ -126,7 +126,7 @@ boundary), which scopes step 4 to this item's diff.
    contradicts. A citation that does not resolve is a defect to fix now.
 2. **Critique the spec.** Small plan (≤ 2 files or one package, no open design question)
    or `--light`: one in-context self-critique against the principle files, always
-   including grounding. Otherwise launch **`todo-spec-critique`** with absolute `planPath`,
+   including grounding. Otherwise launch **`spec-critique`** with absolute `planPath`,
    `item`, `principleFiles`, and `lenses` scoped to the item (add the opt-in
    `frontend-ssot` for frontend items in a monorepo; drop `domain` when no declared
    non-negotiable applies). While it runs, do read-only prep: read the code the plan
@@ -141,7 +141,7 @@ boundary), which scopes step 4 to this item's diff.
    (`git status --porcelain --untracked-files=all`). Under 150 changed lines, or
    `--light`: review through the correctness lens only, in context, or in one background
    `Explore` agent when the diff is large; verify each blocker/major against the code;
-   drop nits. Otherwise launch **`todo-code-review`** with absolute `item`, `baseline`,
+   drop nits. Otherwise launch **`code-review`** with absolute `item`, `baseline`,
    `repoDir`, `principleFiles`, and `personas`: `["correctness", "simplicity", "tests"]`
    for 150–400 lines, all six above. **The moment it launches, start step 5's scoped tests
    in the background.** Apply every confirmed fix, re-run the scoped tests, and use
@@ -173,8 +173,9 @@ boundary), which scopes step 4 to this item's diff.
 ## Workflows
 
 - **Launch** by `scriptPath: "${CLAUDE_PLUGIN_ROOT}/workflows/<name>.js"` with `args` and
-  absolute paths. Never use `name:`, and never edit the plugin's scripts to hardcode an
-  input. Both run read-only `Explore` agents: pre-allow `git diff` / `git status`, and
+  absolute paths. The plugin also registers them as `todo-loop:spec-critique` and
+  `todo-loop:code-review`, but `scriptPath` is the tested launch path. Never edit the
+  plugin's scripts to hardcode an input. Both run read-only `Explore` agents: pre-allow `git diff` / `git status`, and
   approve each launch once per project with "don't ask again" (or use auto mode).
 - **Fallback.** The Workflow tool needs Claude Code v2.1.154+ on a paid plan. Without it,
   use **`compound-engineering:ce-doc-review`** (step 2) and **`ce-code-review`** (step 4)
@@ -199,9 +200,9 @@ restored; if it was cleared or achieved, re-set it per Setup step 4.
 ### Per-item checklist (mirror this in each report)
 
 1. [ ] Spec/plan written (decisions + rationale + deferrals logged)
-2. [ ] Spec critiqued (`todo-spec-critique`, or light pass) and `mustFix` folded in
+2. [ ] Spec critiqued (`spec-critique`, or light pass) and `mustFix` folded in
 3. [ ] Implemented via TDD; minimum scoped tests green
-4. [ ] Code review (`todo-code-review`, or light pass) run; confirmed fixes applied
+4. [ ] Code review (`code-review`, or light pass) run; confirmed fixes applied
 5. [ ] Scoped tests + type-checks green (output shown); batch suite green if this item closes a batch
 6. [ ] Report + backlog updated (done marker, shipped/deferred noted)
 7. [ ] Emergent rules appended to `docs/conventions.md` (if any)

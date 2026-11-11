@@ -1,7 +1,7 @@
 // @ts-nocheck — workflow script: runs in the Workflow runtime's async wrapper with
 // injected globals (agent/parallel/phase/args) and a top-level return; not a TS module.
 export const meta = {
-  name: 'todo-spec-critique',
+  name: 'spec-critique',
   description: 'Critique a TODO-item plan from several independent angles, then synthesize a prioritized revision list',
   phases: [
     { title: 'Critique', detail: 'one reviewer per lens (principles, simplicity, testability, domain, gaps, grounding; frontend-ssot opt-in)' },

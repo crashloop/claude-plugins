@@ -17,8 +17,8 @@ function load(name) {
   }
 }
 
-const review = load('todo-code-review.js')
-const critique = load('todo-spec-critique.js')
+const review = load('code-review.js')
+const critique = load('spec-critique.js')
 const finding = { severity: 'major', location: '/r/a.py:1', title: 't', detail: 'd', fix: 'f' }
 
 // Every reviewer dead -> throw, never an empty "clean" result.
