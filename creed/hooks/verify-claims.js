@@ -27,8 +27,9 @@ const textOf = ev => {
   if (Array.isArray(c)) return c.filter(b => b && b.type === 'text').map(b => b.text).join(' ');
   return '';
 };
-let lastText = '';
-for (let i = events.length - 1; i >= 0; i--) {
+// Stop can fire before the final message reaches the transcript; prefer the hook's own copy.
+let lastText = input.last_assistant_message || '';
+for (let i = events.length - 1; !lastText && i >= 0; i--) {
   const t = textOf(events[i]);
   if (t && t.trim()) { lastText = t; break; }
 }
