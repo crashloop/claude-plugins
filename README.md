@@ -26,7 +26,7 @@ Restart Claude Code afterwards; hooks load at session start.
 
 | Plugin | What it does |
 |--------|--------------|
-| [creed](creed/) | Keeps a working discipline present and enforced: injects a compressed operating core every prompt (and after context compaction), gates done/fixed/passing claims that ran no command, and blocks git commands that stage secret-shaped files. |
+| [creed](creed/) | Keeps a working discipline present and enforced: injects a compressed operating core every prompt (and after context compaction), and gates done/fixed/passing claims that ran no command. |
 | [ask-all](ask-all/) | Lets the user answer many agent questions at once: a form drawn above the prompt with a trade-off per option, multi-select, and follow-ups that appear on demand, plus a browser-form fallback. For wayfinder, grilling and any skill that batches decisions. |
 | [trust-check](trust-check/) | Audits a company website from outside, the way a careful buyer would: twelve analysts check message, trust signals, reputation and name, competitors, AI involvement, trackers and malware-like code, email reachability, legal gaps and market fit, then one HTML report gives persona verdicts and issue counts by domain. |
 | [todo-loop](todo-loop/) | Converts a plan into fresh-agent-ready `TODO.md` items, checks and estimates the backlog, then works every open item to completion: plan, spec critique, TDD, code review, tests and verify per item, in parallel worktrees by default, with two background review workflows that adversarially verify each finding. |

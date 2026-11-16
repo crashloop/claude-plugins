@@ -19,9 +19,8 @@ into hooks, one per failure mode:
 | **Persistence** | `UserPromptSubmit` | Injects the core every turn, so it survives a filling, summarized context. |
 | **Presence** | `SessionStart` (`compact`) | Re-injects after a context compaction, the one moment `UserPromptSubmit` cannot cover. |
 | **Enforcement** | `Stop` | Blocks a "done / fixed / passing" claim when no real command ran that turn. A reminder becomes a hard gate. |
-| **Enforcement** | `PreToolUse` (`Bash`) | Denies a `git add`/`commit`/`stash` that names a secret-shaped file (`.env`, `*.pem`, `id_rsa`, credentials). |
 
-The first two keep the rules in front of the model. The last two *enforce* rather than *ask*.
+The first two keep the rules in front of the model. The last *enforces* rather than *asks*.
 
 ## The claim gate
 
@@ -39,15 +38,6 @@ phrasings and can occasionally false-positive, and "a real command ran" is a pro
 check ran." It catches the common failure: declaring victory with nothing executed. Upgrade path:
 have the gate extract the claimed check and re-run it, or escalate flagged turns to a small-model
 judge.
-
-## The secrets gate
-
-`hooks/block-secrets.js` runs before every Bash call and denies `git add`/`commit`/`stash`
-commands that name a secret-shaped path. `.env.example` and friends are allowed through.
-
-**Ceiling (by design).** It matches the command string, not file contents: it catches
-`git add .env`, but not a key pasted into a source file and not `git add .` sweeping an
-untracked `.env`. Upgrade path: inspect `git diff --cached --name-only` instead of the command.
 
 ## Install
 

@@ -9,7 +9,7 @@
     {
       "name": "creed",
       "source": "./creed",
-      "description": "Injects the compressed operating core every session and prompt; gates unverified completion claims.",
+      "description": "Injects the compressed operating core every prompt and after context compaction; gates unverified completion claims.",
       "category": "productivity"
     },
     {
